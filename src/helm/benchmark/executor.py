@@ -82,6 +82,7 @@ class Executor:
     def process(self, state: RequestState) -> RequestState:
         try:
             result: RequestResult = self.service.make_request(self.execution_spec.auth, state.request)
+           
         except Exception as e:
             raise ExecutorError(f"{str(e)} Request: {state.request}") from e
         if not result.success:

@@ -52,7 +52,8 @@ class HuggingFaceServer:
             raise Exception(f"Unknown type of model_config: {model_config}")
         with htrack_block(f"Loading Hugging Face model for config {model_config}"):
             # WARNING this may fail if your GPU does not have enough memory
-            self.model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True, **model_kwargs).to(
+            # I'm addding output_hidden_states=True to the model to get the hidden states
+            self.model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True, output_hidden_states=True, **model_kwargs).to(
                 self.device
             )
         with htrack_block(f"Loading Hugging Face tokenizer model for config {model_config}"):
@@ -68,6 +69,13 @@ class HuggingFaceServer:
         raw_request["output_scores"] = True
         top_k_per_token: int = raw_request["top_k_per_token"]
         del raw_request["top_k_per_token"]
+        #-----------------------------------------
+        raw_request["output_hidden_states"] = True
+        # getting index of last question
+        index_in_prompt = raw_request["prompt"].rfind("Question")
+        tokens_question = self.tokenizer(raw_request["prompt"][index_in_prompt:], return_tensors="pt", return_token_type_ids=False)
+        len_tokens_question = tokens_question["input_ids"].shape[1]
+        #-----------------------------------------
         if len(raw_request["stop_sequences"]) > 0:
             stop_sequence_ids = self.tokenizer(
                 raw_request["stop_sequences"], return_token_type_ids=False, add_special_tokens=False
@@ -81,14 +89,14 @@ class HuggingFaceServer:
         relevant_raw_request = {
             key: raw_request[key]
             for key in raw_request
-            if key not in ["engine", "prompt", "echo_prompt", "stop_sequences"]
+            if key not in ["engine", "prompt", "echo_prompt", "stop_sequences", "output_hidden_states"]
         }
-
+        #-----------------------------------------
         # Use HuggingFace's `generate` method.
         output = self.model.generate(**encoded_input, **relevant_raw_request)
         sequences = output.sequences
         scores = output.scores
-
+        hidden_states = {"len_tokens_question": len_tokens_question, "hidden_states" : torch.cat(output.hidden_states[0]).detach().cpu()}
         # Compute logprobs for each completed sequence.
         all_logprobs_of_chosen_tokens = []
         all_top_logprobs_dicts = []
@@ -130,6 +138,7 @@ class HuggingFaceServer:
                     "tokens": tokens,
                     "logprobs": logprobs_of_chosen_tokens,
                     "top_logprobs_dicts": top_logprobs_dicts,
+                    "hidden_states": hidden_states
                 }
             )
 
@@ -207,11 +216,11 @@ class HuggingFaceClient(Client):
             error: str = f"HuggingFace error: {e}"
             return RequestResult(success=False, cached=False, error=error, completions=[], embedding=[])
 
+        
         completions = []
         for raw_completion in response["completions"]:
             sequence_logprob: float = 0
             tokens: List[Token] = []
-
             if request.echo_prompt:
                 # Add prompt to list of generated tokens.
                 generated_tokens = raw_completion["tokens"][response["input_length"] :]
@@ -226,8 +235,9 @@ class HuggingFaceClient(Client):
             ):
                 tokens.append(Token(text=token_text, logprob=logprob, top_logprobs=top_logprobs_dict))
                 sequence_logprob += logprob
-
-            completion = Sequence(text=raw_completion["text"], logprob=sequence_logprob, tokens=tokens)
+            
+            hidden_states = raw_completion["hidden_states"]
+            completion = Sequence(text=raw_completion["text"], logprob=sequence_logprob, tokens=tokens, hidden_states=hidden_states)
             completion = truncate_sequence(completion, request)
             completions.append(completion)
 

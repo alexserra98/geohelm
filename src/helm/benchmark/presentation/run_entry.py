@@ -32,6 +32,9 @@ def merge_run_entries(run_entries1: RunEntries, run_entries2: RunEntries):
 def read_run_entries(paths: List[str]) -> RunEntries:
     """Read a HOCON file `path` and return the `RunEntry`s."""
     run_entries = RunEntries([])
+    print(10*"*")
+    print(paths)
+    #import pdb; pdb.set_trace()
     for path in paths:
         with open(path) as f:
             raw = parse_hocon(f.read())

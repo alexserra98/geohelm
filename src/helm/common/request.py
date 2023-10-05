@@ -112,12 +112,16 @@ class Sequence:
 
     # The tokens
     tokens: List[Token]
-
+    
+    # The hiddens states
+    hidden_states: Optional[Dict] = None
+    
     # Why did the sequence finish?
     finish_reason: Optional[Dict] = None
 
     def __add__(self, other: "Sequence") -> "Sequence":
-        return Sequence(self.text + other.text, self.logprob + other.logprob, self.tokens + other.tokens)
+        return Sequence(self.text + other.text, self.logprob + other.logprob, self.tokens + other.tokens, \
+                        self.hidden_states + other.hidden_states)
 
     def render_lines(self) -> List[str]:
         result = [

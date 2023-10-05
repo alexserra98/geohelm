@@ -28,6 +28,8 @@ from .metrics.metric_service import MetricService
 from .metrics.metric import Metric, MetricSpec, MetricResult, PerInstanceStats, create_metric, Stat
 from .window_services.tokenizer_service import TokenizerService
 
+from helm.benchmark.hidden_geometry.geometry import RunGeometry
+import pickle
 
 LATEST_SYMLINK: str = "latest"
 
@@ -166,7 +168,7 @@ class Runner:
 
     def run_all(self, run_specs: List[RunSpec]):
         failed_run_specs: List[RunSpec] = []
-
+        #ADD across run metrics
         for run_spec in tqdm(run_specs, disable=None):
             try:
                 with htrack_block(f"Running {run_spec.name}"):
@@ -180,6 +182,7 @@ class Runner:
         if not self.exit_on_error and failed_run_specs:
             failed_runs_str = ", ".join([f'"{run_spec.name}"' for run_spec in failed_run_specs])
             raise RunnerError(f"Failed runs: [{failed_runs_str}]")
+        # Add cross model metrics
 
     def run_one(self, run_spec: RunSpec):
         # Load the scenario
@@ -245,7 +248,6 @@ class Runner:
 
         # Execute (fill up results)
         scenario_state = self.executor.execute(scenario_state)
-
         # Apply the metrics
         # When performing a dry run, only estimate the number of tokens instead
         # of calculating the metrics.
@@ -266,6 +268,8 @@ class Runner:
                     stats.extend(metric_result.aggregated_stats)
                     per_instance_stats.extend(metric_result.per_instance_stats)
 
+        # Collect the hidden states - add try in case there are no hidden states
+        hidden_geometry: RunGeometry() = RunGeometry(scenario_state)
         # Check that there aren't duplicate `Stat`s
         # Note: doesn't catch near misses.
         metric_counts: typing.Counter[MetricName] = Counter([stat.name for stat in stats])
@@ -287,7 +291,12 @@ class Runner:
         write(os.path.join(run_path, "scenario.json"), json.dumps(asdict_without_nones(scenario), indent=2))
 
         # Write scenario state
-        write(os.path.join(run_path, "scenario_state.json"), json.dumps(asdict_without_nones(scenario_state), indent=2))
+        # we need to remove hidden_states from scenario_state because they can't be serialized
+        dict_scenario = asdict_without_nones(scenario_state)
+        for request in dict_scenario["request_states"]:
+            request["result"]["completions"][0]["hidden_states"] = None 
+
+        write(os.path.join(run_path, "scenario_state.json"), json.dumps(dict_scenario, indent=2))
 
         write(
             os.path.join(run_path, "stats.json"),
@@ -297,5 +306,10 @@ class Runner:
             os.path.join(run_path, "per_instance_stats.json"),
             json.dumps(list(map(asdict_without_nones, remove_per_instance_stats_nans(per_instance_stats))), indent=2),
         )
-
+        
+        #write RunGeometry instance
+        path = os.path.join(run_path, "hidden_geometry.pkl")
+        with open(path, 'wb') as f:  
+            pickle.dump(hidden_geometry,f)
+            
         cache_stats.print_status()

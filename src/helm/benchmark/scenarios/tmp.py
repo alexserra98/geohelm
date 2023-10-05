@@ -97,6 +97,7 @@ class MMLUScenario(Scenario):
         # Download the raw data
         data_path: str = os.path.join(self.output_path, "data")
         self.download_mmlu(data_path)
+
         # Read all the instances
         instances: List[Instance] = []
         splits: Dict[str, str] = {
