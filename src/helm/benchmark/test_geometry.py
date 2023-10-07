@@ -1,5 +1,4 @@
 import pickle
-import pickle
 from helm.benchmark.hidden_geometry.geometry import Geometry, RunGeometry
 from helm.benchmark.adaptation.scenario_state import ScenarioState
 from helm.benchmark.scenarios.scenario import Instance

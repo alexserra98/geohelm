@@ -11,7 +11,8 @@ import einsum
 import torch.nn.functional as F
 import functools
 from sklearn.neighbors import NearestNeighbors
-from .utils import get_instances_id
+from .utils import get_instances_id, hidden_states_collapse
+import tqdm
 
 K = 50
 
@@ -41,17 +42,18 @@ class RunGeometry():
 
   def __init__(self, scenario_state: ScenarioState):
     self.scenario_state = scenario_state
-    self._instances_hiddenstates = self._get_instances_hidden_states()
-    self.max_train_instances = self.scenario_state.adapter_spec.max_train_instances
-    self._instances_id = {}
+    self._hidden_states = None
+    #self.max_train_instances = self.scenario_state.adapter_spec.max_train_instances
+    self._instances_id = self.instances_id_set()
+    self._dict_nn = self.set_dict_nn(k=500)
     
   
-  def _get_instances_hidden_states(self) -> List[InstanceHiddenSates]:  
+  def _get_instances_hidden_states(self, scenario_state) -> List[InstanceHiddenSates]:  
     """
     Instantiate a list of InstanceHiddenSates
     """
     instances_hiddenstates = []
-    for instance, request_state in zip(self.scenario_state.instances, self.scenario_state.request_states):
+    for instance, request_state in zip(scenario_state.instances, scenario_state.request_states):
       # hd --> (num_layers, num_tokens, model_dim)
       hd = request_state.result.completions[0].hidden_states["hidden_states"].detach().cpu()
       id = instance.id
@@ -60,37 +62,45 @@ class RunGeometry():
     return instances_hiddenstates
   
   @property
-  def instances_id(self) -> Dict:
-    for emb_processing in ["last", "sum"]:
-      for algorithm in ["2nn", "gride"]:
-        key = emb_processing+" "+algorithm
-        self._instances_id[key] = get_instances_id(self.hidden_states_collapse(emb_processing), algorithm)
+  def hidden_states(self):
+    """
+    Return hidden states of all instances
+
+    Output
+    ----------
+    (num_instances, num_layers, model_dim)
+    """ 
+    if self._hidden_states == None:
+      instances_hiddenstates = self._get_instances_hidden_states(self.scenario_state)
+      hidden_states = {}
+      for method in ["last", "sum"]:
+        hidden_states[method] = hidden_states_collapse(instances_hiddenstates, method)
+      self._hidden_states = hidden_states
+
+    return self._hidden_states
+  
+  @property
+  def instances_id(self):
     return self._instances_id
-  
-  
-  def hidden_states_collapse(self, method)-> Array:
-      """
-      Collect hidden states of all instances and collapse them in one tensor
-      using the provided method
 
-      Output
-      ----------
-      (num_instances, num_layers, model_dim)
-      """ 
-      assert method in ["last", "sum"], "method must be last or sum"
-      hidden_states = []
-      for i in self._instances_hiddenstates:
-        #collect only test question tokens
-        instance_hidden_states = i.hidden_states[:,-i.len_tokens_question:,:]
-        if method == "last":
-          hidden_states.append(instance_hidden_states[:,-1,:])
-        elif method == "sum":
-          hidden_states.append(reduce(instance_hidden_states, "l s d -> l d", "mean"))
-      # (num_instances, num_layers, model_dim)
-      hidden_states = torch.stack(hidden_states)
-      return hidden_states.detach().cpu().numpy()
+ 
+  def instances_id_set(self):
+    """
+    Compute the ID of all instances
 
-  def nearest_neighbour(self, method: str, k: int) -> List[Array]:
+    Output
+    ----------
+    Dict[str, np.array(num_layers)]
+    """
+    id = {}
+    for emb_processing in ["last", "sum"]:
+      for algorithm in ["gride"]: #2nn no longer supported
+        key = emb_processing
+        id[key] = get_instances_id(self.hidden_states[emb_processing], algorithm)
+    
+    return id
+  
+  def nearest_neighbour(self, method: str, k: int) -> np.ndarray:
     """
     Compute the nearest neighbours of each instance in the run per layer
     using the provided method
@@ -98,7 +108,7 @@ class RunGeometry():
     ----------
     Array(num_layers, num_instances, k_neighbours)
     """
-    hidden_states = self.hidden_states_collapse(method)
+    hidden_states = self.hidden_states[method]
     assert k <= hidden_states.shape[0], "K must be smaller than the number of instances"
     layers = hidden_states.shape[1]
     neigh_matrix_list = []
@@ -110,14 +120,28 @@ class RunGeometry():
       neigh_matrix_list.append(indices)
     
     return np.stack(neigh_matrix_list)
-     
-  def get_instances_id(self) -> Dict:
-    return self._instances_id
+
+  @property
+  def dict_nn(self):
+    return self._dict_nn
   
-  def get_instances_hiddenstates(self) -> List[InstanceHiddenSates]:
-    return self._instances_hiddenstates
-
-
+ 
+  def set_dict_nn(self, k):
+    """
+    Compute the nearest neighbours of each layer
+    with k --> [1, 500, num_instances]
+    
+    Output
+    ----------
+    Dict[k-method, Array(num_layers, num_instances, k_neighbours)]
+    """
+    dict_nn = {}
+    for method in ["last", "sum"]:
+      key = method
+      dict_nn[key] = self.nearest_neighbour(method, k)
+    return dict_nn
+  
+      
 class Geometry():
   """
   Geometry stores all the runs in a version and collect methods to compute geometric information of the representations
@@ -127,18 +151,45 @@ class Geometry():
   _instances_overlap: compute the overlap between two representations
   neig_overlap: compute the overlap between two representations
   """
-  def __init__(self, runs: List[RunGeometry]) -> None:
-    self.runs = runs
+  def __init__(self, nearest_neig: List[Dict]) -> None:
+    """
+    Parameters
+    ----------
+    nearest_neig : List[Dict]
+        List of dictionaries containing the nearest neighbours of each layer of the two runs
+        Dict[k-method, Array(num_layers, num_instances, k_neighbours)]
+    """
+    self.nearest_neig = nearest_neig
+
+  def get_all_overlaps(self) -> Dict:
+    """
+    Compute the overlap between all the runs
+    Output
+    ----------
+    Dict[k-method, np.ndarray[i,j, Array(num_layers, num_layers)]]
+    """
+    overlaps = {}
+    num_runs = len(self.nearest_neig)
+    num_layers = self.nearest_neig[0]["last"].shape[0]
+    k = 500
+    for method in ["last", "sum"]:
+      key = method
+      tensor_overlap = np.empty([num_runs, num_runs, num_layers, num_layers])
+      for i in tqdm.tqdm(range(num_runs), desc = "Runs completed"):
+        for j in range(num_runs):
+          tensor_overlap[i][j] = self._instances_overlap(i,j,method)
+    return overlaps
     
-  def _instances_overlap(self,run1, run2, method, k) -> Array:
-    nn1 = run1.nearest_neighbour(method, k=k)
-    nn2 = run2.nearest_neighbour(method, k=k)
+  def _instances_overlap(self, i,j,method) -> Array:
+    nn1 = self.nearest_neig[i][method]
+    nn2 = self.nearest_neig[j][method]
     assert nn1.shape == nn2.shape, "The two nearest neighbour matrix must have the same shape" 
     layers_len = nn1.shape[0]
     overlaps = np.empty([layers_len, layers_len])
     for i in range(layers_len):
       for j in range(layers_len):
-        overlaps[i][j] = self.neig_overlap(nn1[i], nn2[j], K=k)
+        # WARNING : the overlap is computed with K=500 THE OTHER OCC IS IN RUNGEOMETRY
+        overlaps[i][j] = self.neig_overlap(nn1[i], nn2[j], K=500)
     return overlaps
   
   def neig_overlap(self, X, Y, K = 10):

@@ -76,7 +76,7 @@ class MMLUScenario(Scenario):
         hlog(f"Reading {csv_path}")
         with open(csv_path) as f:
             reader = csv.reader(f, delimiter=",")
-            for row in reader:
+            for n,row in enumerate(reader):
                 # Example: ["What color is the sky?", "red", "blue", "green", "B"]
                 question, answers, correct_choice = row[0], row[1:-1], row[-1]
                 answers_dict = dict(zip(["A", "B", "C", "D", "E"], answers))

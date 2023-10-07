@@ -290,26 +290,36 @@ class Runner:
         # Write out scenario
         write(os.path.join(run_path, "scenario.json"), json.dumps(asdict_without_nones(scenario), indent=2))
 
-        # Write scenario state
-        # we need to remove hidden_states from scenario_state because they can't be serialized
-        dict_scenario = asdict_without_nones(scenario_state)
-        for request in dict_scenario["request_states"]:
-            request["result"]["completions"][0]["hidden_states"] = None 
+        # # Write scenario state
+        # # we need to remove hidden_states from scenario_state because they can't be serialized
+        # dict_scenario = asdict_without_nones(scenario_state)
+        # for request in dict_scenario["request_states"]:
+        #     request["result"]["completions"][0]["hidden_states"] = None 
 
-        write(os.path.join(run_path, "scenario_state.json"), json.dumps(dict_scenario, indent=2))
+        # write(os.path.join(run_path, "scenario_state.json"), json.dumps(dict_scenario, indent=2))
 
+        
         write(
             os.path.join(run_path, "stats.json"),
             json.dumps([asdict_without_nones(stat) for stat in remove_stats_nans(stats)], indent=2),
         )
-        write(
-            os.path.join(run_path, "per_instance_stats.json"),
-            json.dumps(list(map(asdict_without_nones, remove_per_instance_stats_nans(per_instance_stats))), indent=2),
-        )
+        # write(
+        #     os.path.join(run_path, "per_instance_stats.json"),
+        #     json.dumps(list(map(asdict_without_nones, remove_per_instance_stats_nans(per_instance_stats))), indent=2),
+        # )
         
-        #write RunGeometry instance
-        path = os.path.join(run_path, "hidden_geometry.pkl")
+        # Write ID of the instance
+        hlog(f"Writing ID of the instances to {run_path}/intrinsic_dim.pkl")
+        path = os.path.join(run_path, "intrinsic_dim.pkl")
         with open(path, 'wb') as f:  
-            pickle.dump(hidden_geometry,f)
-            
+            pickle.dump(hidden_geometry.instances_id,f)
+
+
+        # Write nearest neighbours matrices of the run
+        hlog(f"Writing nearest neighbours matrices of the run to {run_path}/nearest_neigh.pkl")
+        path = os.path.join(run_path, "nearest_neigh.pkl")
+        hlog("Warning: I am setting the number of nearest neighbours to 500")
+        with open(path, 'wb') as f:  
+            pickle.dump(hidden_geometry.dict_nn,f) 
+        
         cache_stats.print_status()
