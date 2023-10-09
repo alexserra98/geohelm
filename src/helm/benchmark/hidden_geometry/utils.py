@@ -7,7 +7,7 @@ from einops import reduce
 
 
 
-def get_instances_id(hidden_states, algorithm = "2nn") -> np.ndarray:
+def get_instances_id(hidden_states,run_meta, algorithm = "2nn") -> np.ndarray:
     """
     Collect hidden states of all instances and compute ID
     we employ two different approaches: the one of the last token, the sum of all tokens
@@ -23,7 +23,7 @@ def get_instances_id(hidden_states, algorithm = "2nn") -> np.ndarray:
     assert algorithm in ["2nn", "gride"], "method must be 2nn or gride"
     # Compute ID
     id_per_layer = []
-    layers = hidden_states.shape[1]
+    layers = run_meta.num_layers
     for i in range(layers): #iterate over layers
         # (num_instances, model_dim)
         layer = Data(hidden_states[:,i,:])

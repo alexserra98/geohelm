@@ -14,8 +14,6 @@ from sklearn.neighbors import NearestNeighbors
 from .utils import get_instances_id, hidden_states_collapse
 import tqdm
 
-K = 50
-
 # Define a type hint 
 Array = Type[np.ndarray]
 Tensor = Type[torch.Tensor]
@@ -25,6 +23,12 @@ class InstanceHiddenSates():
   id: str 
   len_tokens_question : int
   hidden_states: Tensor
+
+@dataclass
+class RunMeta():
+  num_layers: int
+  num_instances: int
+  model_dim: int
 
 
 class RunGeometry():
@@ -42,11 +46,18 @@ class RunGeometry():
 
   def __init__(self, scenario_state: ScenarioState):
     self.scenario_state = scenario_state
-    self._hidden_states = None
+    self._hidden_states = self.set_hidden_states()
+    self.run_meta = self._set_run_meta()
     #self.max_train_instances = self.scenario_state.adapter_spec.max_train_instances
     self._instances_id = self.instances_id_set()
-    self._dict_nn = self.set_dict_nn(k=500)
+    self._dict_nn = self.set_dict_nn(k=int(self.run_meta.num_instances*0.8))
     
+
+  def _set_run_meta(self):
+    num_layers = self.hidden_states["last"].shape[1]
+    num_instances = self.hidden_states["last"].shape[0]
+    model_dim = self.hidden_states["last"].shape[2]
+    return RunMeta(num_layers, num_instances, model_dim)
   
   def _get_instances_hidden_states(self, scenario_state) -> List[InstanceHiddenSates]:  
     """
@@ -64,21 +75,19 @@ class RunGeometry():
   @property
   def hidden_states(self):
     """
-    Return hidden states of all instances
-
     Output
     ----------
     (num_instances, num_layers, model_dim)
     """ 
-    if self._hidden_states == None:
-      instances_hiddenstates = self._get_instances_hidden_states(self.scenario_state)
-      hidden_states = {}
-      for method in ["last", "sum"]:
-        hidden_states[method] = hidden_states_collapse(instances_hiddenstates, method)
-      self._hidden_states = hidden_states
-
     return self._hidden_states
   
+  def set_hidden_states(self):
+    instances_hiddenstates = self._get_instances_hidden_states(self.scenario_state)
+    hidden_states = {}
+    for method in ["last", "sum"]:
+      hidden_states[method] = hidden_states_collapse(instances_hiddenstates, method)
+    return hidden_states
+
   @property
   def instances_id(self):
     return self._instances_id
@@ -96,7 +105,7 @@ class RunGeometry():
     for emb_processing in ["last", "sum"]:
       for algorithm in ["gride"]: #2nn no longer supported
         key = emb_processing
-        id[key] = get_instances_id(self.hidden_states[emb_processing], algorithm)
+        id[key] = get_instances_id(self.hidden_states[emb_processing], self.run_meta, algorithm)
     
     return id
   
@@ -110,7 +119,7 @@ class RunGeometry():
     """
     hidden_states = self.hidden_states[method]
     assert k <= hidden_states.shape[0], "K must be smaller than the number of instances"
-    layers = hidden_states.shape[1]
+    layers = self.run_meta.num_layers
     neigh_matrix_list = []
     for i in range(layers):
       neigh = NearestNeighbors(n_neighbors=k)
@@ -129,7 +138,7 @@ class RunGeometry():
   def set_dict_nn(self, k):
     """
     Compute the nearest neighbours of each layer
-    with k --> [1, 500, num_instances]
+    with k --> [1, K, num_instances]
     
     Output
     ----------
@@ -151,6 +160,7 @@ class Geometry():
   _instances_overlap: compute the overlap between two representations
   neig_overlap: compute the overlap between two representations
   """
+
   def __init__(self, nearest_neig: List[Dict]) -> None:
     """
     Parameters
@@ -160,6 +170,7 @@ class Geometry():
         Dict[k-method, Array(num_layers, num_instances, k_neighbours)]
     """
     self.nearest_neig = nearest_neig
+
 
   def get_all_overlaps(self) -> Dict:
     """
@@ -171,16 +182,17 @@ class Geometry():
     overlaps = {}
     num_runs = len(self.nearest_neig)
     num_layers = self.nearest_neig[0]["last"].shape[0]
-    k = 500
+    k = K
     for method in ["last", "sum"]:
-      key = method
-      tensor_overlap = np.empty([num_runs, num_runs, num_layers, num_layers])
-      for i in tqdm.tqdm(range(num_runs), desc = "Runs completed"):
-        for j in range(num_runs):
-          tensor_overlap[i][j] = self._instances_overlap(i,j,method)
+      overlaps[method] = {}
+      desc = "Computing overlap for method " + method
+      for i in tqdm.tqdm(range(num_runs-1), desc = desc):
+        for j in range(i+1,num_runs):
+          # indexes are not 0-based because it's easier to mange with plolty sub_trace
+          overlaps[method][(i+1,j+1)] = self._instances_overlap(i,j,method)
     return overlaps
     
-  def _instances_overlap(self, i,j,method) -> Array:
+  def _instances_overlap(self, i,j,method) -> np.ndarray:
     nn1 = self.nearest_neig[i][method]
     nn2 = self.nearest_neig[j][method]
     assert nn1.shape == nn2.shape, "The two nearest neighbour matrix must have the same shape" 
@@ -188,11 +200,11 @@ class Geometry():
     overlaps = np.empty([layers_len, layers_len])
     for i in range(layers_len):
       for j in range(layers_len):
-        # WARNING : the overlap is computed with K=500 THE OTHER OCC IS IN RUNGEOMETRY
-        overlaps[i][j] = self.neig_overlap(nn1[i], nn2[j], K=500)
+        # WARNING : the overlap is computed with K=K THE OTHER OCC IS IN RUNGEOMETRY
+        overlaps[i][j] = self.neig_overlap(nn1[i], nn2[j])
     return overlaps
   
-  def neig_overlap(self, X, Y, K = 10):
+  def neig_overlap(self, X, Y):
     """
     Computes the neighborhood overlap between two representations.
     Parameters
@@ -201,9 +213,7 @@ class Geometry():
         nearest neighbor index matrix of the first representation
     Y : 2D array of ints
         nearest neighbor index matrix of the second representation
-    k : int
-        number of nearest neighbors used to compute the overlap
-
+    
     Returns
     -------
     overlap : float
@@ -211,7 +221,9 @@ class Geometry():
     """
     assert X.shape[0] == Y.shape[0]
     ndata = X.shape[0]
-    iter = map(lambda x,y : np.intersect1d(x,y).shape[0]/K, X,Y)
+    # Is this correct?
+    k = X.shape[1]
+    iter = map(lambda x,y : np.intersect1d(x,y).shape[0]/k, X,Y)
     out = functools.reduce(lambda x,y: x+y, iter)
     return out/ndata
   

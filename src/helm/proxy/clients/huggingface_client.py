@@ -1,7 +1,7 @@
 from copy import deepcopy
 import torch
 from dataclasses import asdict
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 from typing import Any, Dict, List
 
 from helm.common.cache import Cache, CacheConfig
@@ -91,8 +91,11 @@ class HuggingFaceServer:
             for key in raw_request
             if key not in ["engine", "prompt", "echo_prompt", "stop_sequences", "output_hidden_states"]
         }
+
+        # TODO: using GenerationConfig
         #-----------------------------------------
         # Use HuggingFace's `generate` method.
+        hlog("Generating...")
         output = self.model.generate(**encoded_input, **relevant_raw_request)
         sequences = output.sequences
         scores = output.scores

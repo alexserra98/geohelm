@@ -318,7 +318,7 @@ class Runner:
         # Write nearest neighbours matrices of the run
         hlog(f"Writing nearest neighbours matrices of the run to {run_path}/nearest_neigh.pkl")
         path = os.path.join(run_path, "nearest_neigh.pkl")
-        hlog("Warning: I am setting the number of nearest neighbours to 500")
+        hlog("Warning: I am setting the number of nearest neighbours to 80/100 of instances")
         with open(path, 'wb') as f:  
             pickle.dump(hidden_geometry.dict_nn,f) 
         
