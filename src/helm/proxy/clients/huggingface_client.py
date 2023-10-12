@@ -51,11 +51,15 @@ class HuggingFaceServer:
         else:
             raise Exception(f"Unknown type of model_config: {model_config}")
         with htrack_block(f"Loading Hugging Face model for config {model_config}"):
+            # we can set if the model should return the hidden states also in the generate method, and we take the condition from the adapter_spec
+            model_kwargs["output_hidden_states"] = True
             # WARNING this may fail if your GPU does not have enough memory
             # I'm addding output_hidden_states=True to the model to get the hidden states
-            self.model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True, output_hidden_states=True, **model_kwargs).to(
+            self.model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True, **model_kwargs).to(
                 self.device
             )
+            # TRY WITH BETTER TRANSFORMER
+            #self.model.to_bettertransformer()
         with htrack_block(f"Loading Hugging Face tokenizer model for config {model_config}"):
             self.tokenizer = AutoTokenizer.from_pretrained(model_name, **model_kwargs)
 
@@ -70,7 +74,6 @@ class HuggingFaceServer:
         top_k_per_token: int = raw_request["top_k_per_token"]
         del raw_request["top_k_per_token"]
         #-----------------------------------------
-        raw_request["output_hidden_states"] = True
         # getting index of last question
         index_in_prompt = raw_request["prompt"].rfind("Question")
         tokens_question = self.tokenizer(raw_request["prompt"][index_in_prompt:], return_tensors="pt", return_token_type_ids=False)
@@ -99,7 +102,13 @@ class HuggingFaceServer:
         output = self.model.generate(**encoded_input, **relevant_raw_request)
         sequences = output.sequences
         scores = output.scores
-        hidden_states = {"len_tokens_question": len_tokens_question, "hidden_states" : torch.cat(output.hidden_states[0]).detach().cpu()}
+
+        #storing hidden states
+        if raw_request["output_hidden_states"]:
+            hidden_states = {"len_tokens_question": len_tokens_question, "hidden_states" : torch.cat(output.hidden_states[0]).detach().cpu()}
+        else:
+            hidden_states = None
+
         # Compute logprobs for each completed sequence.
         all_logprobs_of_chosen_tokens = []
         all_top_logprobs_dicts = []
@@ -183,7 +192,7 @@ class HuggingFaceClient(Client):
                 model_config = HuggingFaceHubModelConfig.from_string(model)
         return _get_singleton_server(model_config)
 
-    def make_request(self, request: Request) -> RequestResult:
+    def make_request(self, request: Request, **kwargs) -> RequestResult:
         # Embedding not supported for this model
         if request.embedding:
             return EMBEDDING_UNAVAILABLE_REQUEST_RESULT
@@ -202,6 +211,7 @@ class HuggingFaceClient(Client):
             "echo_prompt": request.echo_prompt,
             "top_k_per_token": request.top_k_per_token,
             "stop_sequences": request.stop_sequences,
+            "output_hidden_states": kwargs.get("hidden_states", False)
         }
 
         # Get cached model server instance if possible (to save on model and tokenizer

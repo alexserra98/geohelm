@@ -89,7 +89,8 @@ class Service(ABC):
         pass
 
     @abstractmethod
-    def make_request(self, auth: Authentication, request: Request) -> RequestResult:
+    #careful added **kwargs! not safe
+    def make_request(self, auth: Authentication, request: Request, **kwargs) -> RequestResult:
         """Actually make a request to an API."""
         pass
 

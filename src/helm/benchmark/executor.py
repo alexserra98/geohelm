@@ -10,6 +10,7 @@ from helm.proxy.services.server_service import ServerService
 from helm.proxy.services.service import Service
 from helm.benchmark.adaptation.scenario_state import ScenarioState
 from helm.benchmark.adaptation.request_state import RequestState
+from functools import partial
 
 
 class ExecutorError(Exception):
@@ -58,7 +59,7 @@ class Executor:
         elif execution_spec.local_path:
             hlog(f"Running in local mode with base path: {execution_spec.local_path}")
             self.service = ServerService(
-                base_path=execution_spec.local_path, root_mode=True, mongo_uri=execution_spec.mongo_uri
+                base_path=execution_spec.local_path, root_mode=True, mongo_uri=execution_spec.mongo_uri, 
             )
         else:
             raise ValueError("Either the proxy server URL or the local path must be set")
@@ -70,18 +71,27 @@ class Executor:
             return scenario_state
 
         # Do it!
+        process = partial(self.process, hidden_states=scenario_state.adapter_spec.hidden_states)
         request_states = parallel_map(
-            self.process,
+            process,
             scenario_state.request_states,
             parallelism=self.execution_spec.parallelism,
         )
 
+        # request_states = parallel_map(
+        #     self.process,
+        #     scenario_state.request_states,
+        #     parallelism=self.execution_spec.parallelism,
+        # )
+
         hlog(f"Processed {len(request_states)} requests")
         return ScenarioState(scenario_state.adapter_spec, request_states)
 
-    def process(self, state: RequestState) -> RequestState:
+
+    # horrible to add hidden_geoemtry here but otherwise it require a major refactoring
+    def process(self, state: RequestState, hidden_states = False) -> RequestState:
         try:
-            result: RequestResult = self.service.make_request(self.execution_spec.auth, state.request)
+            result: RequestResult = self.service.make_request(self.execution_spec.auth, state.request, hidden_states=hidden_states)
 
         except Exception as e:
             raise ExecutorError(f"{str(e)} Request: {state.request}") from e

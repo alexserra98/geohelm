@@ -182,7 +182,6 @@ class Geometry():
     overlaps = {}
     num_runs = len(self.nearest_neig)
     num_layers = self.nearest_neig[0]["last"].shape[0]
-    k = K
     for method in ["last", "sum"]:
       overlaps[method] = {}
       desc = "Computing overlap for method " + method

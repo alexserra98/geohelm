@@ -29,6 +29,7 @@ def run_entries_to_run_specs(
     models_to_run: Optional[List[str]] = None,
     groups_to_run: Optional[List[str]] = None,
     priority: Optional[int] = None,
+    hidden_states: Optional[bool] = False, # --> I don't like it here, but I don't know where to put it
 ) -> List[RunSpec]:
     """Runs RunSpecs given a list of RunSpec descriptions."""
     run_specs: List[RunSpec] = []
@@ -54,6 +55,9 @@ def run_entries_to_run_specs(
                 adapter_spec = replace(
                     adapter_spec, num_train_trials=1 if adapter_spec.max_train_instances == 0 else num_train_trials
                 )
+            if hidden_states is not False:
+                adapter_spec = replace(adapter_spec, hidden_states=hidden_states)
+                
             run_spec = replace(run_spec, adapter_spec=adapter_spec)
 
             # Append groups
@@ -181,6 +185,8 @@ def validate_args(args):
     assert args.suite != LATEST_SYMLINK, f"Suite name can't be '{LATEST_SYMLINK}'"
     if args.cache_instances_only:
         assert args.cache_instances, "If --cache-instances-only is set, --cache-instances must also be set."
+    if args.enable_hidden_geometry:
+        hlog("WARNING: The --enable-hidden-geometry flag is experimental. Currently it works only with huggingface models.")
 
 
 @htrack(None)
@@ -262,6 +268,14 @@ def main():
         help="Experimental: Where to read model deployments from",
         default=[],
     )
+    #-----------------#
+    parser.add_argument(
+        "--enable-hidden-geometry",
+        action="store_true",
+        help="Experimental: Enable hidden geometry for the model. Warning it works only with huggingface models.",
+        default=False,
+    
+    )   
     add_run_args(parser)
     args = parser.parse_args()
     validate_args(args)
@@ -293,6 +307,7 @@ def main():
         models_to_run=args.models_to_run,
         groups_to_run=args.groups_to_run,
         priority=args.priority,
+        hidden_states=args.enable_hidden_geometry,
     )
     hlog(f"{len(run_entries)} entries produced {len(run_specs)} run specs")
 

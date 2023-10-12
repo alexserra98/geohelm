@@ -28,7 +28,7 @@ class Client(ABC):
         return cache_key
 
     @abstractmethod
-    def make_request(self, request: Request) -> RequestResult:
+    def make_request(self, request: Request, **kwargs) -> RequestResult:
         pass
 
     @abstractmethod

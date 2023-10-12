@@ -179,21 +179,25 @@ class AutoClient(Client):
             self.clients[model] = client
         return client
 
-    def make_request(self, request: Request) -> RequestResult:
+    # added **kwargs for hidden_states 
+    def make_request(self, request: Request, **kwargs) -> RequestResult:
         """
         Dispatch based on the the name of the model (e.g., openai/davinci).
         Retries if request fails.
         """
 
         # TODO: need to revisit this because this swallows up any exceptions that are raised.
+        # adding hidden_states
+        hidden_states = kwargs.get("hidden_states", False)
         @retry_request
-        def make_request_with_retry(client: Client, request: Request) -> RequestResult:
-            return client.make_request(request)
+        def make_request_with_retry(client: Client, request: Request, **kwargs) -> RequestResult:
+            hidden_states = kwargs.get("hidden_states", False)
+            return client.make_request(request, hidden_states=hidden_states)
 
         client: Client = self._get_client(request.model)
 
         try:
-            return make_request_with_retry(client=client, request=request)
+            return make_request_with_retry(client=client, request=request, hidden_states=hidden_states)
         except RetryError as e:
             last_attempt: Attempt = e.last_attempt
             retry_error: str = (

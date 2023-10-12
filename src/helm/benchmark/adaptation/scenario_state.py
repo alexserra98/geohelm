@@ -1,5 +1,5 @@
 from collections import defaultdict, OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import List, Dict, Tuple, Optional
 
 from helm.benchmark.scenarios.scenario import Instance
@@ -32,6 +32,8 @@ class ScenarioState:
             instances_set[request_state.instance] = None
             key = (request_state.train_trial_index, request_state.instance, request_state.reference_index)
             self.request_state_map[key].append(request_state)
+            # hidden_states
+            #request_state.request = replace(request_state.request, hidden_states=request_state.hidden_states)
         self.instances: List[Instance] = list(instances_set.keys())
 
     def get_request_states(

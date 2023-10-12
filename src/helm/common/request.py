@@ -58,6 +58,8 @@ class Request:
     """Used for chat models. (OpenAI only for now).
     if messages is specified for a chat model, the prompt is ignored.
     Otherwise, the client should convert the prompt into a message."""
+    # hidden_states: Optional[bool] = None
+    # """Whether to ask the model to output hidden states - it works only with huggingface models"""
 
     @property
     def model_organization(self) -> str:

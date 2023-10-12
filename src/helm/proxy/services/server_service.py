@@ -81,7 +81,7 @@ class ServerService(Service):
             requests.append(request)
         return QueryResult(requests=requests)
 
-    def make_request(self, auth: Authentication, request: Request) -> RequestResult:
+    def make_request(self, auth: Authentication, request: Request, **kwargs) -> RequestResult:
         """Actually make a request to an API."""
         # TODO: try to invoke the API even if we're not authenticated, and if
         #       it turns out the results are cached, then we can just hand back the results.
@@ -93,7 +93,8 @@ class ServerService(Service):
         self.accounts.check_can_use(auth.api_key, model_group)
 
         # Use!
-        request_result: RequestResult = self.client.make_request(request)
+        hidden_states = kwargs.get("hidden_states", False)
+        request_result: RequestResult = self.client.make_request(request, hidden_states=hidden_states)
 
         # Only deduct if not cached
         if not request_result.cached:

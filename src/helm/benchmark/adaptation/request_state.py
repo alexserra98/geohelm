@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass,replace
 from typing import Optional, Dict, List
 
 from helm.benchmark.scenarios.scenario import Instance
@@ -45,9 +45,14 @@ class RequestState:
     num_conditioning_tokens: int = 0
     """The number of initial tokens that will be ignored when computing language modeling metrics"""
 
+    # hidden_states: Optional[bool] = None
+    # """Whether to ask the model to output hidden states - it works only with huggingface models"""
+
     def __post_init__(self):
         if self.request_mode:
             assert self.request_mode in ["original", "calibration"], f"Invalid request_mode: {self.request_mode}"
+        # if self.hidden_states:
+        #     replace(self.request, hidden_states=self.hidden_states)
 
     def render_lines(self) -> List[str]:
         output = [f"train_trial_index: {self.train_trial_index}"]

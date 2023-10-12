@@ -182,7 +182,7 @@ class Runner:
         if not self.exit_on_error and failed_run_specs:
             failed_runs_str = ", ".join([f'"{run_spec.name}"' for run_spec in failed_run_specs])
             raise RunnerError(f"Failed runs: [{failed_runs_str}]")
-        # Add cross model metrics
+
 
     def run_one(self, run_spec: RunSpec):
         # Load the scenario
@@ -268,8 +268,7 @@ class Runner:
                     stats.extend(metric_result.aggregated_stats)
                     per_instance_stats.extend(metric_result.per_instance_stats)
 
-        # Collect the hidden states - add try in case there are no hidden states
-        hidden_geometry: RunGeometry() = RunGeometry(scenario_state)
+
         # Check that there aren't duplicate `Stat`s
         # Note: doesn't catch near misses.
         metric_counts: typing.Counter[MetricName] = Counter([stat.name for stat in stats])
@@ -308,18 +307,21 @@ class Runner:
         #     json.dumps(list(map(asdict_without_nones, remove_per_instance_stats_nans(per_instance_stats))), indent=2),
         # )
         
-        # Write ID of the instance
-        hlog(f"Writing ID of the instances to {run_path}/intrinsic_dim.pkl")
-        path = os.path.join(run_path, "intrinsic_dim.pkl")
-        with open(path, 'wb') as f:  
-            pickle.dump(hidden_geometry.instances_id,f)
+        # Collect the hidden states - and perform Analysis 
+        if scenario_state.adapter_spec.hidden_states:
+            hidden_geometry: RunGeometry() = RunGeometry(scenario_state)
+            # Write ID of the instance
+            hlog(f"Writing ID of the instances to {run_path}/intrinsic_dim.pkl")
+            path = os.path.join(run_path, "intrinsic_dim.pkl")
+            with open(path, 'wb') as f:  
+                pickle.dump(hidden_geometry.instances_id,f)
 
 
-        # Write nearest neighbours matrices of the run
-        hlog(f"Writing nearest neighbours matrices of the run to {run_path}/nearest_neigh.pkl")
-        path = os.path.join(run_path, "nearest_neigh.pkl")
-        hlog("Warning: I am setting the number of nearest neighbours to 80/100 of instances")
-        with open(path, 'wb') as f:  
-            pickle.dump(hidden_geometry.dict_nn,f) 
-        
+            # Write nearest neighbours matrices of the run
+            hlog(f"Writing nearest neighbours matrices of the run to {run_path}/nearest_neigh.pkl")
+            path = os.path.join(run_path, "nearest_neigh.pkl")
+            hlog("Warning: I am setting the number of nearest neighbours to 80/100 of instances")
+            with open(path, 'wb') as f:  
+                pickle.dump(hidden_geometry.dict_nn,f) 
+            
         cache_stats.print_status()

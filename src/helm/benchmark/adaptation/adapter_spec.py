@@ -91,3 +91,6 @@ class AdapterSpec:
     # If true, for instances with multiple correct reference, the gold answer should be considered
     # to be all of the correct references rather than any of the correct references.
     multi_label: bool = False
+
+    # If true the model will be asked to output also the hidden states for the geoemtrical analysis
+    hidden_states: bool = False
