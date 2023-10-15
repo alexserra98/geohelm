@@ -24,6 +24,11 @@ from helm.proxy.clients.huggingface_model_registry import (
 )
 from threading import Lock
 
+from helm.benchmark.hidden_geometry.utils import hidden_states_process
+
+from einops import reduce
+import numpy as np
+import copy
 
 # Map of HELM model name to Hugging Face Hub model name where they differ.
 _KNOWN_MODEL_ALIASES: Dict[str, str] = {
@@ -53,16 +58,16 @@ class HuggingFaceServer:
         with htrack_block(f"Loading Hugging Face model for config {model_config}"):
             # we can set if the model should return the hidden states also in the generate method, and we take the condition from the adapter_spec
             model_kwargs["output_hidden_states"] = True
+            #model_kwargs["device_map"]="auto"
             # WARNING this may fail if your GPU does not have enough memory
             # I'm addding output_hidden_states=True to the model to get the hidden states
             self.model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True, **model_kwargs).to(
                 self.device
             )
-            # TRY WITH BETTER TRANSFORMER
             #self.model.to_bettertransformer()
         with htrack_block(f"Loading Hugging Face tokenizer model for config {model_config}"):
             self.tokenizer = AutoTokenizer.from_pretrained(model_name, **model_kwargs)
-
+            
     def serve_request(self, raw_request: Dict[str, Any]):
         encoded_input = self.tokenizer(raw_request["prompt"], return_tensors="pt", return_token_type_ids=False).to(
             self.device
@@ -92,20 +97,31 @@ class HuggingFaceServer:
         relevant_raw_request = {
             key: raw_request[key]
             for key in raw_request
-            if key not in ["engine", "prompt", "echo_prompt", "stop_sequences", "output_hidden_states"]
+            if key not in ["engine", "prompt", "echo_prompt", "stop_sequences"]
         }
 
         # TODO: using GenerationConfig
         #-----------------------------------------
         # Use HuggingFace's `generate` method.
-        hlog("Generating...")
         output = self.model.generate(**encoded_input, **relevant_raw_request)
         sequences = output.sequences
         scores = output.scores
 
         #storing hidden states
         if raw_request["output_hidden_states"]:
-            hidden_states = {"len_tokens_question": len_tokens_question, "hidden_states" : torch.cat(output.hidden_states[0]).detach().cpu()}
+            # instance_hiddenstates = {"len_tokens_question": len_tokens_question, "hidden_states" : torch.cat(output.hidden_states[0])}
+            # hidden_states = hidden_states_process(instance_hiddenstates)
+            #print(f'{"x"*100}\n{hidden_states["sum"].shape=}\n{hidden_states["last"].shape=}\n{"x"*100}')
+            # del instance_hiddenstates
+
+            hs = torch.cat(output.hidden_states[0][-len_tokens_question:]).detach().cpu().numpy()
+            # cropped_hidden_states = [copy.deepcopy(i[-len_tokens_question:,:].mean(0).detach().cpu().numpy()) for i in output.hidden_states[0]]
+            # # for i in output.hidden_states[0]:
+            # #     cropped_hidden_states.append(copy.deepcopy(i[-len_tokens_question:,:].mean(0).detach().cpu().numpy()))
+            # hidden_states = cropped_hidden_states
+            # del output
+            #hidden_states =reduce(copy.deepcopy(hs[:,-len_tokens_question:,:]), "l s d -> l d", "mean")
+            hidden_states = {"last": copy.deepcopy(hs[:,-1,:]), "sum":reduce(copy.deepcopy(hs[:,-len_tokens_question:,:]), "l s d -> l d", "mean")}
         else:
             hidden_states = None
 
@@ -249,7 +265,9 @@ class HuggingFaceClient(Client):
                 tokens.append(Token(text=token_text, logprob=logprob, top_logprobs=top_logprobs_dict))
                 sequence_logprob += logprob
             
+            #modifying the hidden states so to keep only the last token and the avg of the tokens of the question
             hidden_states = raw_completion["hidden_states"]
+
             completion = Sequence(text=raw_completion["text"], logprob=sequence_logprob, tokens=tokens, hidden_states=hidden_states)
             completion = truncate_sequence(completion, request)
             completions.append(completion)

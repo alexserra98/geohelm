@@ -21,8 +21,7 @@ Tensor = Type[torch.Tensor]
 @dataclass
 class InstanceHiddenSates():
   id: str 
-  len_tokens_question : int
-  hidden_states: Tensor
+  hidden_states: dict
 
 @dataclass
 class RunMeta():
@@ -66,10 +65,9 @@ class RunGeometry():
     instances_hiddenstates = []
     for instance, request_state in zip(scenario_state.instances, scenario_state.request_states):
       # hd --> (num_layers, num_tokens, model_dim)
-      hd = request_state.result.completions[0].hidden_states["hidden_states"].detach().cpu()
+      hd = request_state.result.completions[0].hidden_states
       id = instance.id
-      len_tokens_question = request_state.result.completions[0].hidden_states["len_tokens_question"]
-      instances_hiddenstates.append(InstanceHiddenSates(id,len_tokens_question, hd))
+      instances_hiddenstates.append(InstanceHiddenSates(id, hd))
     return instances_hiddenstates
   
   @property
@@ -102,10 +100,9 @@ class RunGeometry():
     Dict[str, np.array(num_layers)]
     """
     id = {}
-    for emb_processing in ["last", "sum"]:
+    for method in ["last", "sum"]:
       for algorithm in ["gride"]: #2nn no longer supported
-        key = emb_processing
-        id[key] = get_instances_id(self.hidden_states[emb_processing], self.run_meta, algorithm)
+        id[method] = get_instances_id(self.hidden_states[method], self.run_meta, algorithm)
     
     return id
   

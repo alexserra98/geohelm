@@ -376,7 +376,6 @@ class Cache(object):
                 cache_stats.increment_compute(self.config.cache_stats_key)
                 # Compute and commit the request/response to SQLite
                 response = compute()
-
                 write_to_key_value_store(key_value_store, request, response)
         if self.follower_config is not None:
             # TODO: Initialize follower_key_value_store in constructor
