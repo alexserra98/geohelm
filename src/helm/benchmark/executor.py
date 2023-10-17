@@ -77,12 +77,7 @@ class Executor:
             scenario_state.request_states,
             parallelism=self.execution_spec.parallelism,
         )
-
-        # request_states = parallel_map(
-        #     self.process,
-        #     scenario_state.request_states,
-        #     parallelism=self.execution_spec.parallelism,
-        # )
+        #request_states = [process(request_state) for request_state in scenario_state.request_states]
 
         hlog(f"Processed {len(request_states)} requests")
         return ScenarioState(scenario_state.adapter_spec, request_states)

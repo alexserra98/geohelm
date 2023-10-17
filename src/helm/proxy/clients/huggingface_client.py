@@ -58,12 +58,15 @@ class HuggingFaceServer:
         with htrack_block(f"Loading Hugging Face model for config {model_config}"):
             # we can set if the model should return the hidden states also in the generate method, and we take the condition from the adapter_spec
             model_kwargs["output_hidden_states"] = True
-            #model_kwargs["device_map"]="auto"
+            model_kwargs["device_map"]="auto"
+            #model_kwargs["low_cpu_mem_usage"]=True
+            #model_kwargs["torch_dtype"]=torch.float16
             # WARNING this may fail if your GPU does not have enough memory
-            # I'm addding output_hidden_states=True to the model to get the hidden states
-            self.model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True, **model_kwargs).to(
-                self.device
-            )
+            # # I'm addding output_hidden_states=True to the model to get the hidden states
+            # self.model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True, **model_kwargs).to(
+            #     self.device
+            # )
+            self.model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True, **model_kwargs)
             #self.model.to_bettertransformer()
         with htrack_block(f"Loading Hugging Face tokenizer model for config {model_config}"):
             self.tokenizer = AutoTokenizer.from_pretrained(model_name, **model_kwargs)
@@ -206,6 +209,7 @@ class HuggingFaceClient(Client):
                 model_config = HuggingFaceHubModelConfig.from_string(_KNOWN_MODEL_ALIASES[model])
             else:
                 model_config = HuggingFaceHubModelConfig.from_string(model)
+        #return HuggingFaceServer(model_config)
         return _get_singleton_server(model_config)
 
     def make_request(self, request: Request, **kwargs) -> RequestResult:

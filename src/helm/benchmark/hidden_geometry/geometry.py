@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from helm.benchmark.adaptation.scenario_state import ScenarioState
 from dataclasses import dataclass
-from typing import List, Dict, Tuple, Optional, Iterable, Set, Type
+from typing import Any, List, Dict, Tuple, Optional, Iterable, Set, Type
 from einops import reduce
 import einsum
 import torch.nn.functional as F
@@ -13,6 +13,7 @@ import functools
 from sklearn.neighbors import NearestNeighbors
 from .utils import get_instances_id, hidden_states_collapse
 import tqdm
+from .cython.cython_func import _instances_overlap
 
 # Define a type hint 
 Array = Type[np.ndarray]
@@ -182,16 +183,21 @@ class Geometry():
     for method in ["last", "sum"]:
       overlaps[method] = {}
       desc = "Computing overlap for method " + method
-      for i in tqdm.tqdm(range(num_runs-1), desc = desc):
+      #can't use tqdm because it creates issues with cython
+      for i in range(num_runs-1):
+        print(f'Computing overlap for method {method} run {i+1}/{num_runs-1}')
         for j in range(i+1,num_runs):
           # indexes are not 0-based because it's easier to mange with plolty sub_trace
           overlaps[method][(i+1,j+1)] = self._instances_overlap(i,j,method)
     return overlaps
-    
+  
+  def __reduce__(self) -> str | tuple[Any, ...]:
+    return self.__class__, (self.nearest_neig,)
+
   def _instances_overlap(self, i,j,method) -> np.ndarray:
     nn1 = self.nearest_neig[i][method]
     nn2 = self.nearest_neig[j][method]
-    assert nn1.shape == nn2.shape, "The two nearest neighbour matrix must have the same shape" 
+    assert nn1.shape == nn2.shape , "The two runs must have the same number of layers"
     layers_len = nn1.shape[0]
     overlaps = np.empty([layers_len, layers_len])
     for i in range(layers_len):
@@ -215,13 +221,22 @@ class Geometry():
     overlap : float
         neighborhood overlap between the two representations
     """
+    # assert X.shape[0] == Y.shape[0]
+    # ndata = X.shape[0]
+    # # Is this correct?
+    # k = X.shape[1]
+    # iter = map(lambda x,y : np.intersect1d(x,y).shape[0]/k, X,Y)
+    # out = functools.reduce(lambda x,y: x+y, iter)
+    # return out/ndata
     assert X.shape[0] == Y.shape[0]
     ndata = X.shape[0]
-    # Is this correct?
+    overlaps = np.empty(ndata)
     k = X.shape[1]
-    iter = map(lambda x,y : np.intersect1d(x,y).shape[0]/k, X,Y)
-    out = functools.reduce(lambda x,y: x+y, iter)
-    return out/ndata
+    for i in range(ndata):
+      overlaps[i] = np.intersect1d(X[i],Y[i]).shape[0]/k
+    return np.mean(overlaps)
+    
+
   
 
         
