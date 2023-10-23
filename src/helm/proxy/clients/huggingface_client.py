@@ -62,7 +62,7 @@ class HuggingFaceServer:
             #model_kwargs["low_cpu_mem_usage"]=True
             #model_kwargs["torch_dtype"]=torch.float16
             # WARNING this may fail if your GPU does not have enough memory
-            # # I'm addding output_hidden_states=True to the model to get the hidden states
+            # I'm addding output_hidden_states=True to the model to get the hidden states
             # self.model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True, **model_kwargs).to(
             #     self.device
             # )
@@ -75,6 +75,7 @@ class HuggingFaceServer:
         encoded_input = self.tokenizer(raw_request["prompt"], return_tensors="pt", return_token_type_ids=False).to(
             self.device
         )
+
         raw_request = deepcopy(raw_request)
         raw_request["do_sample"] = True
         raw_request["return_dict_in_generate"] = True
@@ -87,6 +88,7 @@ class HuggingFaceServer:
         tokens_question = self.tokenizer(raw_request["prompt"][index_in_prompt:], return_tensors="pt", return_token_type_ids=False)
         len_tokens_question = tokens_question["input_ids"].shape[1]
         #-----------------------------------------
+        
         if len(raw_request["stop_sequences"]) > 0:
             stop_sequence_ids = self.tokenizer(
                 raw_request["stop_sequences"], return_token_type_ids=False, add_special_tokens=False
@@ -106,6 +108,7 @@ class HuggingFaceServer:
         # TODO: using GenerationConfig
         #-----------------------------------------
         # Use HuggingFace's `generate` method.
+        import pdb; pdb.set_trace()
         output = self.model.generate(**encoded_input, **relevant_raw_request)
         sequences = output.sequences
         scores = output.scores
