@@ -255,18 +255,29 @@ class SlurmRunner(Runner):
             ]
         )
         # TODO: Make default Slurm arguments configurable.
+        # raw_slurm_args: Dict[str, str] = {
+        #     "account": "nlp",
+        #     "cpus_per_task": "4",
+        #     "mem": "32G",
+        #     "gres": "gpu:0",
+        #     "open_mode": "append",
+        #     "partition": "john",
+        #     "time": "14-0",  # Deadline of 14 days
+        #     "mail_type": "FAIL",
+        #     "job_name": run_name,
+        #     "output": log_path,
+        #     "chdir": os.getcwd(),
+        # }
         raw_slurm_args: Dict[str, str] = {
-            "account": "nlp",
-            "cpus_per_task": "4",
-            "mem": "32G",
+            "nodes":1,
+            "cpus_per_task": "48",
+            "mem": "200G",
             "gres": "gpu:0",
             "open_mode": "append",
-            "partition": "john",
-            "time": "14-0",  # Deadline of 14 days
-            "mail_type": "FAIL",
+            "partition": "THIN",
+            "time": "00:59:00",  # Deadline of 14 days
             "job_name": run_name,
             "output": log_path,
-            "chdir": os.getcwd(),
         }
         # TODO: Move resource requirements into RunSpec.
         slurm_node_names = os.getenv(_SLURM_NODE_NAMES_ENV_NAME)
