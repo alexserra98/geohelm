@@ -108,11 +108,10 @@ class HuggingFaceServer:
         # TODO: using GenerationConfig
         #-----------------------------------------
         # Use HuggingFace's `generate` method.
-        import pdb; pdb.set_trace()
         output = self.model.generate(**encoded_input, **relevant_raw_request)
         sequences = output.sequences
         scores = output.scores
-
+        
         #storing hidden states
         if raw_request["output_hidden_states"]:
             # instance_hiddenstates = {"len_tokens_question": len_tokens_question, "hidden_states" : torch.cat(output.hidden_states[0])}
@@ -175,7 +174,7 @@ class HuggingFaceServer:
                     "hidden_states": hidden_states
                 }
             )
-
+        torch.cuda.empty_cache()
         return {"completions": completions, "input_length": len(encoded_input.input_ids[0])}
 
 
