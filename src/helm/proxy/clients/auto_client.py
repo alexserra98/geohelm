@@ -179,8 +179,8 @@ class AutoClient(Client):
             self.clients[model] = client
         return client
 
-    # added **kwargs for hidden_states 
-    def make_request(self, request: Request, **kwargs) -> RequestResult:
+
+    def make_request(self, requests: list[Request], **kwargs) -> RequestResult:
         """
         Dispatch based on the the name of the model (e.g., openai/davinci).
         Retries if request fails.
@@ -190,23 +190,51 @@ class AutoClient(Client):
         # adding hidden_states
         hidden_states = kwargs.get("hidden_states", False)
         @retry_request
-        def make_request_with_retry(client: Client, request: Request, **kwargs) -> RequestResult:
+        def make_request_with_retry(client: Client, requests: list[Request], **kwargs) -> RequestResult:
             hidden_states = kwargs.get("hidden_states", False)
-            return client.make_request(request, hidden_states=hidden_states)
+            return client.make_request(requests, hidden_states=hidden_states)
 
-        client: Client = self._get_client(request.model)
+        client: Client = self._get_client(requests[0].model)
 
         try:
-            return make_request_with_retry(client=client, request=request, hidden_states=hidden_states)
+            return make_request_with_retry(client=client, requests=requests, hidden_states=hidden_states)
         except RetryError as e:
             last_attempt: Attempt = e.last_attempt
             retry_error: str = (
-                f"Failed to make request to {request.model} after retrying {last_attempt.attempt_number} times"
+                f"Failed to make request to {requests[0].model} after retrying {last_attempt.attempt_number} times"
             )
             hlog(retry_error)
 
             # Notify our user that we failed to make the request even after retrying.
             return replace(last_attempt.value, error=f"{retry_error}. Error: {last_attempt.value.error}")
+    # added **kwargs for hidden_states 
+    # def make_request(self, request: Request, **kwargs) -> RequestResult:
+    #     """
+    #     Dispatch based on the the name of the model (e.g., openai/davinci).
+    #     Retries if request fails.
+    #     """
+
+    #     # TODO: need to revisit this because this swallows up any exceptions that are raised.
+    #     # adding hidden_states
+    #     hidden_states = kwargs.get("hidden_states", False)
+    #     @retry_request
+    #     def make_request_with_retry(client: Client, request: Request, **kwargs) -> RequestResult:
+    #         hidden_states = kwargs.get("hidden_states", False)
+    #         return client.make_request(request, hidden_states=hidden_states)
+
+    #     client: Client = self._get_client(request.model)
+
+    #     try:
+    #         return make_request_with_retry(client=client, request=request, hidden_states=hidden_states)
+    #     except RetryError as e:
+    #         last_attempt: Attempt = e.last_attempt
+    #         retry_error: str = (
+    #             f"Failed to make request to {request.model} after retrying {last_attempt.attempt_number} times"
+    #         )
+    #         hlog(retry_error)
+
+    #         # Notify our user that we failed to make the request even after retrying.
+    #         return replace(last_attempt.value, error=f"{retry_error}. Error: {last_attempt.value.error}")
 
     def _get_tokenizer_client(self, tokenizer: str) -> Client:
         """Return a client based on the tokenizer, creating it if necessary."""

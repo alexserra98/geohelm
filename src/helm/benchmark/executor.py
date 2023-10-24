@@ -70,30 +70,50 @@ class Executor:
             hlog("Skipped execution.")
             return scenario_state
 
+        requests = [i for i in scenario_state.request_states]
         # Do it!
         process = partial(self.process, hidden_states=scenario_state.adapter_spec.hidden_states)
-        request_states = parallel_map(
-            process,
-            scenario_state.request_states,
-            parallelism=self.execution_spec.parallelism,
-        )
+        # request_states = parallel_map(
+        #     process,
+        #     scenario_state.request_states,
+        #     parallelism=self.execution_spec.parallelism,
+        # )
         #request_states = [process(request_state) for request_state in scenario_state.request_states]
-
+        request_states = process(requests)
         hlog(f"Processed {len(request_states)} requests")
         return ScenarioState(scenario_state.adapter_spec, request_states)
 
-
-    # horrible to add hidden_geoemtry here but otherwise it require a major refactoring
-    def process(self, state: RequestState, hidden_states = False) -> RequestState:
+    def process(self, requests_states: list[RequestState], hidden_states = False) -> RequestState:
+        
+        requests = [request_state.request for request_state in requests_states]
         try:
-            result: RequestResult = self.service.make_request(self.execution_spec.auth, state.request, hidden_states=hidden_states)
+            results: list[RequestResult] = self.service.make_request(self.execution_spec.auth, requests, hidden_states=hidden_states)
 
         except Exception as e:
-            raise ExecutorError(f"{str(e)} Request: {state.request}") from e
-        if not result.success:
-            if result.error_flags and not result.error_flags.is_fatal:
-                hlog(f"WARNING: Non-fatal error treated as empty completion: {result.error}")
-                result.completions = [Sequence(text="", logprob=0, tokens=[])]
-            else:
-                raise ExecutorError(f"{str(result.error)} Request: {state.request}")
-        return replace(state, result=result)
+            raise ExecutorError(f"{str(e)} Request: ") from e
+
+        out = []
+        for result, request in zip(results,requests):
+            if not result.success:
+                if result.error_flags and not result.error_flags.is_fatal:
+                    hlog(f"WARNING: Non-fatal error treated as empty completion: {result.error}")
+                    result.completions = [Sequence(text="", logprob=0, tokens=[])]
+                else:
+                    raise ExecutorError(f"{str(result.error)} Request: {requests}")
+                out.append(replace(request, result=result))
+        return out
+
+    # # horrible to add hidden_geoemtry here but otherwise it require a major refactoring
+    # def process(self, state: RequestState, hidden_states = False) -> RequestState:
+    #     try:
+    #         result: RequestResult = self.service.make_request(self.execution_spec.auth, state.request, hidden_states=hidden_states)
+
+    #     except Exception as e:
+    #         raise ExecutorError(f"{str(e)} Request: {state.request}") from e
+    #     if not result.success:
+    #         if result.error_flags and not result.error_flags.is_fatal:
+    #             hlog(f"WARNING: Non-fatal error treated as empty completion: {result.error}")
+    #             result.completions = [Sequence(text="", logprob=0, tokens=[])]
+    #         else:
+    #             raise ExecutorError(f"{str(result.error)} Request: {state.request}")
+    #     return replace(state, result=result)

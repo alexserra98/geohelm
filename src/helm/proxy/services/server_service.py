@@ -81,28 +81,52 @@ class ServerService(Service):
             requests.append(request)
         return QueryResult(requests=requests)
 
-    def make_request(self, auth: Authentication, request: Request, **kwargs) -> RequestResult:
+    def make_request(self, auth: Authentication, requests: list[Request], **kwargs) -> RequestResult:
         """Actually make a request to an API."""
         # TODO: try to invoke the API even if we're not authenticated, and if
         #       it turns out the results are cached, then we can just hand back the results.
         #       https://github.com/stanford-crfm/benchmarking/issues/56
 
         self.accounts.authenticate(auth)
-        model_group: str = get_model_group(request.model)
+        model_group: str = get_model_group(requests[0].model)
         # Make sure we can use
         self.accounts.check_can_use(auth.api_key, model_group)
 
         # Use!
         hidden_states = kwargs.get("hidden_states", False)
-        request_result: RequestResult = self.client.make_request(request, hidden_states=hidden_states)
+        requests_results: list[RequestResult] = self.client.make_request(requests, hidden_states=hidden_states)
 
         # Only deduct if not cached
-        if not request_result.cached:
-            # Count the number of tokens used
-            count: int = self.token_counter.count_tokens(request, request_result.completions)
-            self.accounts.use(auth.api_key, model_group, count)
+        for request_result,request in zip(requests_results,requests):
+            if not request_result.cached:
+                # Count the number of tokens used
+                count: int = self.token_counter.count_tokens(request, request_result.completions)
+                self.accounts.use(auth.api_key, model_group, count)
 
-        return request_result
+        return requests_results
+
+    # def make_request(self, auth: Authentication, request: Request, **kwargs) -> RequestResult:
+    #     """Actually make a request to an API."""
+    #     # TODO: try to invoke the API even if we're not authenticated, and if
+    #     #       it turns out the results are cached, then we can just hand back the results.
+    #     #       https://github.com/stanford-crfm/benchmarking/issues/56
+
+    #     self.accounts.authenticate(auth)
+    #     model_group: str = get_model_group(request.model)
+    #     # Make sure we can use
+    #     self.accounts.check_can_use(auth.api_key, model_group)
+
+    #     # Use!
+    #     hidden_states = kwargs.get("hidden_states", False)
+    #     request_result: RequestResult = self.client.make_request(request, hidden_states=hidden_states)
+
+    #     # Only deduct if not cached
+    #     if not request_result.cached:
+    #         # Count the number of tokens used
+    #         count: int = self.token_counter.count_tokens(request, request_result.completions)
+    #         self.accounts.use(auth.api_key, model_group, count)
+
+    #     return request_result
 
     def tokenize(self, auth: Authentication, request: TokenizationRequest) -> TokenizationRequestResult:
         """Tokenize via an API."""
