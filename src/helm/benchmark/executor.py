@@ -117,7 +117,8 @@ class Executor:
         model_kwargs = {}
         model_kwargs["output_hidden_states"] = True
         model_kwargs["device_map"]="auto"
-        model_name = "gpt2"
+        model_kwargs["cache_dir"]="/orfeo/scratch/dssc/zenocosini/"
+        model_name = "meta-llama/Llama-2-13b-hf"
         model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True, **model_kwargs)
         tokenizer = AutoTokenizer.from_pretrained(model_name, **model_kwargs)
         request_states = [process(model, tokenizer, device,request_state) for request_state in tqdm(scenario_state.request_states, desc="Processing requests")]
