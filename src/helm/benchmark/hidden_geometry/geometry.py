@@ -43,9 +43,10 @@ class RunGeometry():
   nearest_neighbour: compute the nearest neighbours of each instance in the run per layer
   """
 
-  def __init__(self, scenario_state: ScenarioState):
+  def __init__(self, scenario_state: ScenarioState | None = None, instaces_hiddenstates: List[InstanceHiddenSates] | None = None):
     self.scenario_state = scenario_state
-    self._hidden_states = self.set_hidden_states()
+    self._instances_hiddenstates = instaces_hiddenstates
+    self._hidden_states = self.set_hidden_states(self._instances_hiddenstates)
     self.run_meta = self._set_run_meta()
     #self.max_train_instances = self.scenario_state.adapter_spec.max_train_instances
     self._instances_id = self.instances_id_set()
@@ -79,8 +80,9 @@ class RunGeometry():
     """ 
     return self._hidden_states
   
-  def set_hidden_states(self):
-    instances_hiddenstates = self._get_instances_hidden_states(self.scenario_state)
+  def set_hidden_states(self, instances_hiddenstates = None):
+    if instances_hiddenstates is None:
+      instances_hiddenstates = self._get_instances_hidden_states(self.scenario_state)
     hidden_states = {}
     for method in ["last", "sum"]:
       hidden_states[method] = hidden_states_collapse(instances_hiddenstates, method)
