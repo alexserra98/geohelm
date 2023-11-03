@@ -33,7 +33,6 @@ import pickle
 
 LATEST_SYMLINK: str = "latest"
 
-
 class RunnerError(Exception):
     """Error that happens in the Runner."""
 
@@ -246,6 +245,9 @@ class Runner:
         # Adapt (convert to requests)
         scenario_state: ScenarioState = adapter.adapt(instances, self.executor.execution_spec.parallelism)
 
+        #with open("scenario_state.pkl", "wb") as f:   
+        #    pickle.dump(scenario_state, f)
+        #return -1
         # Execute (fill up results)
         scenario_state = self.executor.execute(scenario_state)
         # Apply the metrics
@@ -282,32 +284,6 @@ class Runner:
         if self.skip_instances:
             hlog("skip_instances was True. Skipping writing results out.")
             return
-
-        # Output benchmarking information and results to files
-        write(os.path.join(run_path, "run_spec.json"), json.dumps(asdict_without_nones(run_spec), indent=2))
-
-        # Write out scenario
-        write(os.path.join(run_path, "scenario.json"), json.dumps(asdict_without_nones(scenario), indent=2))
-
-        # # Write scenario state
-        # # we need to remove hidden_states from scenario_state because they can't be serialized
-        # dict_scenario = asdict_without_nones(scenario_state)
-        # for request in dict_scenario["request_states"]:
-        #     request["result"]["completions"][0]["hidden_states"] = None 
-
-        # write(os.path.join(run_path, "scenario_state.json"), json.dumps(dict_scenario, indent=2))
-
-        
-        write(
-            os.path.join(run_path, "stats.json"),
-            json.dumps([asdict_without_nones(stat) for stat in remove_stats_nans(stats)], indent=2),
-        )
-        # write(
-        #     os.path.join(run_path, "per_instance_stats.json"),
-        #     json.dumps(list(map(asdict_without_nones, remove_per_instance_stats_nans(per_instance_stats))), indent=2),
-        # )
-        
-        # Collect the hidden states - and perform Analysis 
         if scenario_state.adapter_spec.hidden_states:
             hidden_geometry: RunGeometry() = RunGeometry(scenario_state)
             # Write ID of the instance
@@ -323,5 +299,32 @@ class Runner:
             hlog("Warning: I am setting the number of nearest neighbours to 80/100 of instances")
             with open(path, 'wb') as f:  
                 pickle.dump(hidden_geometry.dict_nn,f) 
-            
+ 
+        write(
+            os.path.join(run_path, "stats.json"),
+            json.dumps([asdict_without_nones(stat) for stat in remove_stats_nans(stats)], indent=2),
+        )
+ 
+        # Output benchmarking information and results to files
+        write(os.path.join(run_path, "run_spec.json"), json.dumps(asdict_without_nones(run_spec), indent=2))
+
+        # Write out scenario
+        write(os.path.join(run_path, "scenario.json"), json.dumps(asdict_without_nones(scenario), indent=2))
+
+        # # Write scenario state
+        # # we need to remove hidden_states from scenario_state because they can't be serialized
+        # dict_scenario = asdict_without_nones(scenario_state)
+        # for request in dict_scenario["request_states"]:
+        #     request["result"]["completions"][0]["hidden_states"] = None 
+
+        # write(os.path.join(run_path, "scenario_state.json"), json.dumps(dict_scenario, indent=2))
+
+        
+       # write(
+        #     os.path.join(run_path, "per_instance_stats.json"),
+        #     json.dumps(list(map(asdict_without_nones, remove_per_instance_stats_nans(per_instance_stats))), indent=2),
+        # )
+        
+        # Collect the hidden states - and perform Analysis 
+           
         cache_stats.print_status()
