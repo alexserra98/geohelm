@@ -134,8 +134,13 @@ class Executor:
         with open("prompts.pkl", "wb") as f:
             pickle.dump(prompts, f)
         print(f'Request saved')
-        request_states = [process(request_state) for request_state in tqdm(scenario_state.request_states, desc="Processing requests")]
-
+        for i,request_state in tqdm(enumerate(scenario_state.request_states), desc="Processing requests"):
+            out = process(request_state)
+            if out != -1:
+                request_states.append(out)
+            else:
+                del scenario_state.request_states[i]    
+        
         hlog(f"Processed {len(request_states)} requests")
         return ScenarioState(scenario_state.adapter_spec, request_states)
 
@@ -148,11 +153,12 @@ class Executor:
         except Exception as e:
             raise ExecutorError(f"{str(e)} Request: {state.request}") from e
         if not result.success:
-            if result.error_flags and not result.error_flags.is_fatal:
-                hlog(f"WARNING: Non-fatal error treated as empty completion: {result.error}")
-                result.completions = [Sequence(text="", logprob=0, tokens=[])]
-            else:
-                raise ExecutorError(f"{str(result.error)} Request: {state.request}")
+            return -1
+            # if result.error_flags and not result.error_flags.is_fatal:
+            #     hlog(f"WARNING: Non-fatal error treated as empty completion: {result.error}")
+            #     result.completions = [Sequence(text="", logprob=0, tokens=[])]
+            # else:
+            #     raise ExecutorError(f"{str(result.error)} Request: {state.request}")
         return replace(state, result=result)
     
     

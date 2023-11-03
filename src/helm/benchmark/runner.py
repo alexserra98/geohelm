@@ -244,12 +244,11 @@ class Runner:
 
         # Adapt (convert to requests)
         scenario_state: ScenarioState = adapter.adapt(instances, self.executor.execution_spec.parallelism)
-
-        #with open("scenario_state.pkl", "wb") as f:   
-        #    pickle.dump(scenario_state, f)
-        #return -1
+        with open("scenario_state.pkl", "wb") as f:   
+            pickle.dump(scenario_state, f)
         # Execute (fill up results)
         scenario_state = self.executor.execute(scenario_state)
+        
         # Apply the metrics
         # When performing a dry run, only estimate the number of tokens instead
         # of calculating the metrics.
