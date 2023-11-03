@@ -153,12 +153,12 @@ class Executor:
         except Exception as e:
             raise ExecutorError(f"{str(e)} Request: {state.request}") from e
         if not result.success:
-            return -1
-            # if result.error_flags and not result.error_flags.is_fatal:
-            #     hlog(f"WARNING: Non-fatal error treated as empty completion: {result.error}")
-            #     result.completions = [Sequence(text="", logprob=0, tokens=[])]
-            # else:
-            #     raise ExecutorError(f"{str(result.error)} Request: {state.request}")
+            if result.error_flags and not result.error_flags.is_fatal:
+                hlog(f"WARNING: Non-fatal error treated as empty completion: {result.error}")
+                result.completions = [Sequence(text="", logprob=0, tokens=[])]
+            else:
+                return -1
+                #raise ExecutorError(f"{str(result.error)} Request: {state.request}")
         return replace(state, result=result)
     
     
