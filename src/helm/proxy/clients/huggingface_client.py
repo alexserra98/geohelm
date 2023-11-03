@@ -245,8 +245,9 @@ class HuggingFaceClient(Client):
             def do_it():
                 return model_server_instance.serve_request(raw_request)
 
-            cache_key = Client.make_cache_key(raw_request, request)
-            response, cached = self.cache.get(cache_key, wrap_request_time(do_it))
+            #cache_key = Client.make_cache_key(raw_request, request)
+            #response, cached = self.cache.get(cache_key, wrap_request_time(do_it))
+            response = wrap_request_time(do_it)()
         except Exception as e:  # Do something if error is encountered.
             error: str = f"HuggingFace error: {e}"
             return RequestResult(success=False, cached=False, error=error, completions=[], embedding=[])
