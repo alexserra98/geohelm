@@ -59,6 +59,7 @@ class HuggingFaceServer:
             # we can set if the model should return the hidden states also in the generate method, and we take the condition from the adapter_spec
             model_kwargs["output_hidden_states"] = True
             model_kwargs["device_map"]="auto"
+            model_kwargs["cache_dir"]="/orfeo/scratch/dssc/zenocosini/"
             #model_kwargs["low_cpu_mem_usage"]=True
             #model_kwargs["torch_dtype"]=torch.float16
             # WARNING this may fail if your GPU does not have enough memory
