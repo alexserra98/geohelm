@@ -457,6 +457,31 @@ ALL_MODELS = [
     ),
     Model(
         group="huggingface",
+        name="huggingface/Llama_7b",
+        tags=[TEXT_MODEL_TAG, FULL_FUNCTIONALITY_TEXT_MODEL_TAG, LOCAL_HUGGINGFACE_MODEL_TAG],
+    ),
+    Model(
+        group="huggingface",
+        name="huggingface/Llama_13b",
+        tags=[TEXT_MODEL_TAG, FULL_FUNCTIONALITY_TEXT_MODEL_TAG, LOCAL_HUGGINGFACE_MODEL_TAG],
+    ),    
+    Model(
+        group="huggingface",
+        name="huggingface/Llama_70b",
+        tags=[TEXT_MODEL_TAG, FULL_FUNCTIONALITY_TEXT_MODEL_TAG, LOCAL_HUGGINGFACE_MODEL_TAG],
+    ),
+    Model(
+        group="huggingface",
+        name="huggingface/opt_1.3b",
+        tags=[TEXT_MODEL_TAG, FULL_FUNCTIONALITY_TEXT_MODEL_TAG, LOCAL_HUGGINGFACE_MODEL_TAG],
+    ),
+    Model(
+        group="huggingface",
+        name="huggingface/Llama_7b",
+        tags=[TEXT_MODEL_TAG, FULL_FUNCTIONALITY_TEXT_MODEL_TAG, LOCAL_HUGGINGFACE_MODEL_TAG],
+    ),
+    Model(
+        group="huggingface",
         name="huggingface/alpaca-7b",
         tags=[TEXT_MODEL_TAG, FULL_FUNCTIONALITY_TEXT_MODEL_TAG, LOCAL_HUGGINGFACE_MODEL_TAG],
     ),
