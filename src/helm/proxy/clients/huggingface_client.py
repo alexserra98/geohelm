@@ -34,6 +34,10 @@ import copy
 _KNOWN_MODEL_ALIASES: Dict[str, str] = {
     "huggingface/gpt2": "gpt2",
     "huggingface/starcoder": "bigcode/starcoder",
+    "huggingface/Llama_13b": "meta-llama/Llama-2-13b-hf",
+    "huggingface/Llama_7b": "meta-llama/Llama-2-7b-hf",
+    "huggingface/Llama_70b": "meta-llama/Llama-2-70b-hf",
+    "huggingface/opt_1.3b": "facebook/opt-1.3b"
 }
 
 
@@ -60,8 +64,7 @@ class HuggingFaceServer:
             model_kwargs["output_hidden_states"] = True
             model_kwargs["device_map"]="auto"
             model_kwargs["cache_dir"]="/orfeo/scratch/dssc/zenocosini/"
-            #model_kwargs["low_cpu_mem_usage"]=True
-            #model_kwargs["torch_dtype"]=torch.float16
+            #model_kwargs["torch_dtype"]="auto"
             # WARNING this may fail if your GPU does not have enough memory
             # I'm addding output_hidden_states=True to the model to get the hidden states
             # self.model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True, **model_kwargs).to(
@@ -246,9 +249,9 @@ class HuggingFaceClient(Client):
             def do_it():
                 return model_server_instance.serve_request(raw_request)
 
-            #cache_key = Client.make_cache_key(raw_request, request)
-            #response, cached = self.cache.get(cache_key, wrap_request_time(do_it))
-            response = wrap_request_time(do_it)()
+            cache_key = Client.make_cache_key(raw_request, request)
+            response, cached = self.cache.get(cache_key, wrap_request_time(do_it))
+            #response = wrap_request_time(do_it)()
         except Exception as e:  # Do something if error is encountered.
             error: str = f"HuggingFace error: {e}"
             return RequestResult(success=False, cached=False, error=error, completions=[], embedding=[])
