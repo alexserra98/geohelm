@@ -64,7 +64,7 @@ class HuggingFaceServer:
             model_kwargs["output_hidden_states"] = True
             model_kwargs["device_map"]="auto"
             model_kwargs["cache_dir"]="/orfeo/scratch/dssc/zenocosini/"
-            #model_kwargs["torch_dtype"]="auto"
+            model_kwargs["torch_dtype"]="auto"
             # WARNING this may fail if your GPU does not have enough memory
             # I'm addding output_hidden_states=True to the model to get the hidden states
             # self.model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True, **model_kwargs).to(
