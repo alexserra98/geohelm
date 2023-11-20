@@ -3,12 +3,30 @@ from dadapy.plot import plot_inf_imb_plane
 from dadapy.metric_comparisons import MetricComparisons
 import numpy as np
 import torch
+from dataclasses import dataclass
 from einops import reduce
 from collections import Counter
+from enum import Enum
+
+@dataclass
+class RunMeta():
+  num_layers: int
+  num_instances: int
+  model_dim: int
+
+class Match(Enum):
+    CORRECT = "correct"
+    WRONG = "wrong"
+    ALL = "all"
+    
+@dataclass
+class InstanceHiddenSates():
+  id: str 
+  match: Match
+  hidden_states: dict[str, np.ndarray]
 
 
-
-def get_instances_id(hidden_states,run_meta, algorithm = "2nn") -> np.ndarray:
+def get_instances_id(hidden_states: np.ndarray ,run_meta: RunMeta, algorithm = "2nn") -> np.ndarray:
     """
     Collect hidden states of all instances and compute ID
     we employ two different approaches: the one of the last token, the sum of all tokens
@@ -21,7 +39,7 @@ def get_instances_id(hidden_states,run_meta, algorithm = "2nn") -> np.ndarray:
     ---------- 
     Dict np.array(num_layers)
     """
-    assert algorithm in ["2nn", "gride"], "method must be 2nn or gride"
+    assert algorithm == "gride", "gride is the only algorithm supported"
     # Compute ID
     id_per_layer = []
     layers = run_meta.num_layers
@@ -64,14 +82,14 @@ def get_instances_id(hidden_states,run_meta, algorithm = "2nn") -> np.ndarray:
 #     hidden_states = torch.stack(hidden_states)
 #     return hidden_states.detach().cpu().numpy()
 
-def hidden_states_collapse(instances_hiddenstates,method)-> np.ndarray:
+def hidden_states_collapse(instances_hiddenstates: list[InstanceHiddenSates], method: str, match: str)-> np.ndarray:
     """
     Collect hidden states of all instances and collapse them in one tensor
     using the provided method
 
     Parameters
     ----------
-    instances_hiddenstates: List[HiddenGeometry]
+    instances_hiddenstates: List[InstanceHiddenSates]
     method: last or sum --> what method to use to collapse hidden states
 
     Output
@@ -85,7 +103,8 @@ def hidden_states_collapse(instances_hiddenstates,method)-> np.ndarray:
         #     hidden_states.append(i.hidden_states)
         # elif method == "last":
         #     hidden_states.append(i.hidden_states[:,-1,:])
-        hidden_states.append(i.hidden_states[method])
+        if i.match == match or match == "all":
+            hidden_states.append(i.hidden_states[method])
         
     # for some reason huggingface does not the full list of activations
     counter = Counter([i.shape[0] for i in hidden_states])
@@ -116,6 +135,29 @@ def hidden_states_process(instance_hiddenstates: dict)-> dict:
     out["sum"] = reduce(hidden_states[:,-len_tokens_question:,:], "l s d -> l d", "mean")
     return out
 
+def exact_match(instance, request_state):
+    """
+    Check if the generated answer is correct
+    """
+    gold = list(filter(lambda a: a.tags and a.tags[0] == "correct", instance.references))[0].output.text
+    pred_index = request_state.result.completions[0].text.strip()
+    pred = request_state.output_mapping.get(pred_index)
+    if not pred:
+        return "wrong"
+    return "correct" if gold == pred else "wrong"
 
+    # prompt = request_state.request.prompt
+    # index_in_prompt = prompt.rfind("Question")
+    # tokens_question = tokenizer(prompt[index_in_prompt:], return_tensors="pt", return_token_type_ids=False)
+    # len_tokens_question = tokens_question["input_ids"].shape[1]
+    # # generation
+    # output = request_state.result.completions[0]
+    # answer = tokenizer.decode(output.text).strip()
+    # reference_index = request_state.output_mapping.get(answer, "incorrect")
+    # if reference_index != "incorrect":
+    #     result = list(filter(lambda a: a.output.text == reference_index, request_state.instance.references))
+    #     if result and result[0].tags and result[0].tags[0] == "correct":
+    #         return True
+    # return False
 
 

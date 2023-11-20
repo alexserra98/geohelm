@@ -283,6 +283,8 @@ class Runner:
         if self.skip_instances:
             hlog("skip_instances was True. Skipping writing results out.")
             return
+        
+        # Collect the hidden states - and perform Analysis 
         if scenario_state.adapter_spec.hidden_states:
             hidden_geometry: RunGeometry() = RunGeometry(scenario_state)
             # Write ID of the instance

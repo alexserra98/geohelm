@@ -11,24 +11,12 @@ import einsum
 import torch.nn.functional as F
 import functools
 from sklearn.neighbors import NearestNeighbors
-from .utils import get_instances_id, hidden_states_collapse
+from .utils import get_instances_id, hidden_states_collapse, RunMeta, exact_match, InstanceHiddenSates
 import tqdm
 
 # Define a type hint 
 Array = Type[np.ndarray]
 Tensor = Type[torch.Tensor]
-
-@dataclass
-class InstanceHiddenSates():
-  id: str 
-  hidden_states: dict
-
-@dataclass
-class RunMeta():
-  num_layers: int
-  num_instances: int
-  model_dim: int
-
 
 class RunGeometry():
   """
@@ -46,7 +34,6 @@ class RunGeometry():
   def __init__(self, scenario_state: ScenarioState | None = None, instaces_hiddenstates: List[InstanceHiddenSates] | None = None):
     self.scenario_state = scenario_state
     self._instances_hiddenstates = instaces_hiddenstates
-    self._hidden_states = self.set_hidden_states(self._instances_hiddenstates)
     self.run_meta = self._set_run_meta()
     #self.max_train_instances = self.scenario_state.adapter_spec.max_train_instances
     self._instances_id = self.instances_id_set()
@@ -54,9 +41,10 @@ class RunGeometry():
     
 
   def _set_run_meta(self):
-    num_layers = self.hidden_states["last"].shape[1]
-    num_instances = self.hidden_states["last"].shape[0]
-    model_dim = self.hidden_states["last"].shape[2]
+    hidden_states = self.set_hidden_states()
+    num_layers = hidden_states["all"]["last"].shape[1]
+    num_instances = hidden_states["all"]["last"].shape[0]
+    model_dim = hidden_states["all"]["last"].shape[2]
     return RunMeta(num_layers, num_instances, model_dim)
   
   def _get_instances_hidden_states(self, scenario_state) -> List[InstanceHiddenSates]:  
@@ -68,24 +56,22 @@ class RunGeometry():
       # hd --> (num_layers, num_tokens, model_dim)
       hd = request_state.result.completions[0].hidden_states
       id = instance.id
-      instances_hiddenstates.append(InstanceHiddenSates(id, hd))
+      match = exact_match(instance,request_state)
+      instances_hiddenstates.append(InstanceHiddenSates(id, match, hd))
     return instances_hiddenstates
   
-  @property
-  def hidden_states(self):
+  def set_hidden_states(self, instances_hiddenstates = None) -> Dict[str, Dict[str, np.ndarray]]:
     """
     Output
     ----------
-    (num_instances, num_layers, model_dim)
+    {method: method(num_instances, num_layers, model_dim)}
     """ 
-    return self._hidden_states
-  
-  def set_hidden_states(self, instances_hiddenstates = None):
     if instances_hiddenstates is None:
       instances_hiddenstates = self._get_instances_hidden_states(self.scenario_state)
-    hidden_states = {}
-    for method in ["last", "sum"]:
-      hidden_states[method] = hidden_states_collapse(instances_hiddenstates, method)
+      
+    hidden_states = {match: {method: hidden_states_collapse(instances_hiddenstates, method, match) 
+                            for method in ["last", "sum"] } 
+                            for match in ["correct", "wrong", "all"]}
     return hidden_states
 
   @property
@@ -95,16 +81,24 @@ class RunGeometry():
  
   def instances_id_set(self):
     """
-    Compute the ID of all instances
-
+    Compute the ID of all instances using gride algorithm
     Output
     ----------
     Dict[str, np.array(num_layers)]
     """
-    id = {}
-    for method in ["last", "sum"]:
-      for algorithm in ["gride"]: #2nn no longer supported
-        id[method] = get_instances_id(self.hidden_states[method], self.run_meta, algorithm)
+    # id = {}
+    # for match in ["correct", "wrong"]:
+    #   id_match = {}
+    #   for method in ["last", "sum"]:
+    #     for algorithm in ["gride"]: #2nn no longer supported
+    #       id_match[method] = get_instances_id(self.hidden_states[method], self.run_meta, algorithm)
+    #   id[match] = id_match
+    # TODO support other type of algorithms
+    hidden_states = self.set_hidden_states()
+    id = {match: 
+            {method: get_instances_id(hidden_states[match][method], self.run_meta, "gride") 
+            for method in ["last", "sum"]} 
+            for match in ["correct", "wrong", "all"]}
     
     return id
   
@@ -116,7 +110,8 @@ class RunGeometry():
     ----------
     Array(num_layers, num_instances, k_neighbours)
     """
-    hidden_states = self.hidden_states[method]
+    hidden_states = self.set_hidden_states()
+    hidden_states = hidden_states["all"][method]
     assert k <= hidden_states.shape[0], "K must be smaller than the number of instances"
     layers = self.run_meta.num_layers
     neigh_matrix_list = []
@@ -160,7 +155,7 @@ class Geometry():
   neig_overlap: compute the overlap between two representations
   """
 
-  def __init__(self, nearest_neig: List[Dict]) -> None:
+  def __init__(self, nearest_neig: List[Dict], intrinsic_dim: List[Dict], accuracy: List) -> None:
     """
     Parameters
     ----------
@@ -168,8 +163,28 @@ class Geometry():
         List of dictionaries containing the nearest neighbours of each layer of the two runs
         Dict[k-method, Array(num_layers, num_instances, k_neighbours)]
     """
-    self.nearest_neig = nearest_neig
+    #self.nearest_neig = nearest_neig
+    self.intrinsic_dim = intrinsic_dim
+    self.accuracy = accuracy
+    self.id_acc = self.get_last_layer_id_diff()
 
+  def get_last_layer_id_diff(self):
+    """
+    Compute difference in last layer ID among 0-shot and few-shot
+    Output
+    ----------
+    Dict[k-method, Dict[accuracy, Array(neigh_order)]]
+    """
+    num_runs = len(self.intrinsic_dim)
+    acc_id = {}
+    for method in ["last", "sum"]:
+      acc_id[method] = []
+      for i in range(num_runs):
+        for j in range(i+1,num_runs):
+          id_diff = np.abs(self.intrinsic_dim[i][method][-1] - self.intrinsic_dim[j][method][-1])
+          acc_diff = np.abs(self.accuracy[i] - self.accuracy[j])
+          acc_id[method].append({"id_diff": id_diff, "acc_diff": acc_diff})  
+    return acc_id
 
   def get_all_overlaps(self) -> Dict:
     """

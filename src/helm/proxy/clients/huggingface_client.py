@@ -29,6 +29,7 @@ from helm.benchmark.hidden_geometry.utils import hidden_states_process
 from einops import reduce
 import numpy as np
 import copy
+import os
 
 # Map of HELM model name to Hugging Face Hub model name where they differ.
 _KNOWN_MODEL_ALIASES: Dict[str, str] = {
@@ -63,7 +64,8 @@ class HuggingFaceServer:
             # we can set if the model should return the hidden states also in the generate method, and we take the condition from the adapter_spec
             model_kwargs["output_hidden_states"] = True
             model_kwargs["device_map"]="auto"
-            model_kwargs["cache_dir"]="/orfeo/scratch/dssc/zenocosini/"
+            if os.path.exists("/orfeo/scratch/dssc/zenocosini/"):
+                model_kwargs["cache_dir"]="/orfeo/scratch/dssc/zenocosini/"
             model_kwargs["torch_dtype"]="auto"
             # WARNING this may fail if your GPU does not have enough memory
             # I'm addding output_hidden_states=True to the model to get the hidden states
