@@ -316,6 +316,13 @@ def exact_set_match(gold: str, pred: str) -> float:
     gold_set, pred_set = extract_gold_pred_sets(gold, pred)
     return float(gold_set == pred_set)
 
+def loss_answer(request_state: RequestState):
+    "Compute the cross entropy loss between the prediction of the model and the correct answer"
+    return request_state.result.completions[0].loss[0]
+
+def perplexity_answer(request_state: RequestState):
+    "Compute the perplexity of the model for the correct answer"
+    return request_state.result.completions[0].perplexity[0]
 
 def absolute_value_difference(gold: str, pred: str) -> float:
     """Compute the absolute value of the difference between two numbers (provided as strings),
@@ -454,6 +461,9 @@ class BasicMetric(Metric):
                 score_k = max(
                     score_func((gold.output.text, gold.test_cases), pred) for gold in code_golds for pred in preds
                 )
+            elif name.name == "loss_answer" or name.name == "perplexity_answer":
+                score_1 = score_func(request_state)
+                score_k = score_1
             else:
                 score_func = cast(Callable[[str, str], float], score_func)  # Make mypy happy.
                 score_1 = max(score_func(gold.output.text, preds[0]) for gold in golds)
@@ -485,6 +495,8 @@ class BasicMetric(Metric):
             "bleu_1": bleu_1,
             "bleu_4": bleu_4,
             "absolute_value_difference": absolute_value_difference,
+            "loss_answer": loss_answer,
+            "perplexity_answer": perplexity_answer
         }
 
         stats: List[Stat] = []
@@ -515,6 +527,7 @@ class BasicMetric(Metric):
         max_prob = np.exp(sorted_completions[0].logprob)
         stats.append(Stat(MetricName("max_prob")).add(max_prob))
 
+        self.names.extend(["loss_answer", "perplexity_answer"])
         # Add other metrics
         for metric_name in self.names:
             if metric_name in metric_fn_mapping:

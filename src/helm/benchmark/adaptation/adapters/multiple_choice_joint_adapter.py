@@ -52,6 +52,7 @@ class MultipleChoiceJointAdapter(InContextLearningAdapter):
             for reference_index, reference in enumerate(eval_instance.references)
         )
         request = Request(
+            instance=eval_instance,
             model=self.adapter_spec.model,
             prompt=prompt.text,
             num_completions=1,

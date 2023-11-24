@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from einops import reduce
 from collections import Counter
 from enum import Enum
+from typing import Dict, List
 
 @dataclass
 class RunMeta():
@@ -23,7 +24,7 @@ class Match(Enum):
 class InstanceHiddenSates():
   id: str 
   match: Match
-  hidden_states: dict[str, np.ndarray]
+  hidden_states: Dict[str, np.ndarray]
 
 
 def get_instances_id(hidden_states: np.ndarray ,run_meta: RunMeta, algorithm = "2nn") -> np.ndarray:
@@ -82,7 +83,7 @@ def get_instances_id(hidden_states: np.ndarray ,run_meta: RunMeta, algorithm = "
 #     hidden_states = torch.stack(hidden_states)
 #     return hidden_states.detach().cpu().numpy()
 
-def hidden_states_collapse(instances_hiddenstates: list[InstanceHiddenSates], method: str, match: str)-> np.ndarray:
+def hidden_states_collapse(instances_hiddenstates: List[InstanceHiddenSates], method: str, match: str)-> np.ndarray:
     """
     Collect hidden states of all instances and collapse them in one tensor
     using the provided method
@@ -116,7 +117,7 @@ def hidden_states_collapse(instances_hiddenstates: list[InstanceHiddenSates], me
     hidden_states = np.stack(hidden_states)
     #return hidden_states.detach().cpu().numpy()
     return hidden_states
-def hidden_states_process(instance_hiddenstates: dict)-> dict:
+def hidden_states_process(instance_hiddenstates: Dict)-> Dict:
     """
     Collect hidden states of all instances and collapse them in one tensor
     using the provided method

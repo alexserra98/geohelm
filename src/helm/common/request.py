@@ -3,7 +3,8 @@ from typing import List, Optional, Dict
 
 from helm.proxy.models import Model, get_model
 from .general import indent_lines, format_text
-
+import torch
+from helm.benchmark.scenarios.scenario import Instance
 
 @dataclass(frozen=True)
 class Request:
@@ -13,9 +14,12 @@ class Request:
     various APIs (e.g., GPT-3, Jurassic).
     """
 
+    instance: Instance
+    """Which instance we're evaluating"""
+    
     model: str = "openai/text-davinci-002"
     """Which model to query"""
-
+    
     embedding: bool = False
     """Whether to query embedding instead of text response"""
 
@@ -114,9 +118,18 @@ class Sequence:
 
     # The tokens
     tokens: List[Token]
+
+    # The logits
+    logits: Optional[torch.tensor] = None
     
     # The hiddens states
     hidden_states: Optional[Dict] = None
+    
+    # The loss in predicting the right answer
+    loss: List[float] = None
+    
+    # The perplexity in predicting the right answer
+    perplexity: List[float] = None
     
     # Why did the sequence finish?
     finish_reason: Optional[Dict] = None

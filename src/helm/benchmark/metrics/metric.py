@@ -319,7 +319,10 @@ class Metric(ABC):
         # Collect statistics per input-metric pair across perturbations
         per_instance_perturbation_stats: Dict[Tuple[MetricName, str], List[Stat]] = defaultdict(list)
         for instance, stats in per_instance_stats.items():
+            
             for stat in stats:
+                if "perplexity_answer" in stat.name.name or "loss_answer" in stat.name.name:
+                    continue
                 assert instance.id is not None
                 # Group all perturbations for a specific metric name together
                 per_instance_perturbation_stats[(replace(stat.name, perturbation=None), instance.id)].append(stat)

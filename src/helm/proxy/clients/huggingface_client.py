@@ -63,16 +63,14 @@ class HuggingFaceServer:
         with htrack_block(f"Loading Hugging Face model for config {model_config}"):
             # we can set if the model should return the hidden states also in the generate method, and we take the condition from the adapter_spec
             model_kwargs["output_hidden_states"] = True
-            model_kwargs["device_map"]="auto"
+            #model_kwargs["device_map"]="auto"
             if os.path.exists("/orfeo/scratch/dssc/zenocosini/"):
                 model_kwargs["cache_dir"]="/orfeo/scratch/dssc/zenocosini/"
-            model_kwargs["torch_dtype"]="auto"
+            #model_kwargs["torch_dtype"]="auto"
             # WARNING this may fail if your GPU does not have enough memory
             # I'm addding output_hidden_states=True to the model to get the hidden states
-            # self.model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True, **model_kwargs).to(
-            #     self.device
-            # )
-            self.model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True, **model_kwargs)
+            self.model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True, **model_kwargs).to( self.device )
+            #self.model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True, **model_kwargs)
             #self.model.to_bettertransformer()
         with htrack_block(f"Loading Hugging Face tokenizer model for config {model_config}"):
             self.tokenizer = AutoTokenizer.from_pretrained(model_name, **model_kwargs)
@@ -89,7 +87,7 @@ class HuggingFaceServer:
         top_k_per_token: int = raw_request["top_k_per_token"]
         del raw_request["top_k_per_token"]
         #-----------------------------------------
-        # getting index of last question
+        # Getting index of last question
         index_in_prompt = raw_request["prompt"].rfind("Question")
         tokens_question = self.tokenizer(raw_request["prompt"][index_in_prompt:], return_tensors="pt", return_token_type_ids=False)
         len_tokens_question = tokens_question["input_ids"].shape[1]
@@ -104,6 +102,14 @@ class HuggingFaceServer:
             del raw_request["stop_sequences"]
             raw_request["eos_token_id"] = stop_sequence_ids.input_ids[0][0]
 
+        #-----------------------------------------
+        # Getting correct answer
+        index = [ref.tags == ['correct'] for ref in raw_request['instance'].references].index(True)
+        gold_space = [" A"," B"," C"," D"][index]
+        gold = ["A","B","C","D"][index]
+        token_gold_space = self.tokenizer(gold_space, return_tensors="pt", return_token_type_ids=False)
+        token_gold = self.tokenizer(gold, return_tensors="pt", return_token_type_ids=False)
+        #-----------------------------------------
         # Strip out irrelevant parameters
         relevant_raw_request = {
             key: raw_request[key]
@@ -114,24 +120,15 @@ class HuggingFaceServer:
         # TODO: using GenerationConfig
         #-----------------------------------------
         # Use HuggingFace's `generate` method.
-        output = self.model.generate(**encoded_input, **relevant_raw_request)
-        sequences = output.sequences
-        scores = output.scores
-        
+        #output = self.model.generate(**encoded_input, **relevant_raw_request)
+        output = self.model(**encoded_input, output_hidden_states=relevant_raw_request["output_hidden_states"])
+        scores = output.logits
+        probs = torch.nn.functional.softmax(scores/float(relevant_raw_request["temperature"]),dim=-1)
+        pred =  torch.multinomial(probs[0], num_samples=1).to(self.device)
+        sequences = torch.concat([encoded_input["input_ids"],pred[-1].unsqueeze(0)],dim=1)
         #storing hidden states
         if raw_request["output_hidden_states"]:
-            # instance_hiddenstates = {"len_tokens_question": len_tokens_question, "hidden_states" : torch.cat(output.hidden_states[0])}
-            # hidden_states = hidden_states_process(instance_hiddenstates)
-            #print(f'{"x"*100}\n{hidden_states["sum"].shape=}\n{hidden_states["last"].shape=}\n{"x"*100}')
-            # del instance_hiddenstates
-
-            hs = torch.cat(output.hidden_states[0][-len_tokens_question:]).detach().cpu().numpy()
-            # cropped_hidden_states = [copy.deepcopy(i[-len_tokens_question:,:].mean(0).detach().cpu().numpy()) for i in output.hidden_states[0]]
-            # # for i in output.hidden_states[0]:
-            # #     cropped_hidden_states.append(copy.deepcopy(i[-len_tokens_question:,:].mean(0).detach().cpu().numpy()))
-            # hidden_states = cropped_hidden_states
-            # del output
-            #hidden_states =reduce(copy.deepcopy(hs[:,-len_tokens_question:,:]), "l s d -> l d", "mean")
+            hs = torch.cat(output.hidden_states[-len_tokens_question:]).detach().cpu().numpy()
             hidden_states = {"last": copy.deepcopy(hs[:,-1,:]), "sum":reduce(copy.deepcopy(hs[:,-len_tokens_question:,:]), "l s d -> l d", "mean")}
         else:
             hidden_states = None
@@ -160,6 +157,13 @@ class HuggingFaceServer:
             all_logprobs_of_chosen_tokens.append(logprobs_of_chosen_tokens)
             all_top_logprobs_dicts.append(top_logprobs_dicts)
 
+        # Compute loss and perplexity in predicting gold
+        loss_space = torch.nn.functional.cross_entropy(probs[:,-1], token_gold_space["input_ids"][0][0].unsqueeze(0).to(torch.long).to(self.device))
+        loss = torch.nn.functional.cross_entropy(probs[:,-1], token_gold["input_ids"][0][0].unsqueeze(0).to(torch.long).to(self.device))
+        perp = torch.exp(loss)
+        perp_space = torch.exp(loss_space)
+        
+
         # Remove prompt from the start of each sequence if echo_prompt is False.
         if not raw_request["echo_prompt"]:
             sequences = [sequence[len(encoded_input.input_ids[0]) :] for sequence in sequences]
@@ -177,7 +181,9 @@ class HuggingFaceServer:
                     "tokens": tokens,
                     "logprobs": logprobs_of_chosen_tokens,
                     "top_logprobs_dicts": top_logprobs_dicts,
-                    "hidden_states": hidden_states
+                    "hidden_states": hidden_states,
+                    "loss" : [loss.item(), loss_space.item()],
+                    "perplexity": [perp.item(), perp_space.item()],
                 }
             )
         torch.cuda.empty_cache()
@@ -230,6 +236,7 @@ class HuggingFaceClient(Client):
             raise ValueError("More than one stop sequence is not supported.")
 
         raw_request = {
+            "instance": request.instance,
             "engine": request.model_engine,
             "prompt": request.prompt,
             "temperature": 1e-7 if request.temperature == 0 else request.temperature,
@@ -251,9 +258,9 @@ class HuggingFaceClient(Client):
             def do_it():
                 return model_server_instance.serve_request(raw_request)
 
-            cache_key = Client.make_cache_key(raw_request, request)
-            response, cached = self.cache.get(cache_key, wrap_request_time(do_it))
-            #response = wrap_request_time(do_it)()
+            #cache_key = Client.make_cache_key(raw_request, request)
+            #response, cached = self.cache.get(cache_key, wrap_request_time(do_it))
+            response = wrap_request_time(do_it)()
         except Exception as e:  # Do something if error is encountered.
             error: str = f"HuggingFace error: {e}"
             return RequestResult(success=False, cached=False, error=error, completions=[], embedding=[])
@@ -280,14 +287,17 @@ class HuggingFaceClient(Client):
             
             #modifying the hidden states so to keep only the last token and the avg of the tokens of the question
             hidden_states = raw_completion["hidden_states"]
+            #logits = raw_completion["logits"]
+            loss = raw_completion["loss"]
+            perplexity = raw_completion["perplexity"]
 
-            completion = Sequence(text=raw_completion["text"], logprob=sequence_logprob, tokens=tokens, hidden_states=hidden_states)
+            completion = Sequence(text=raw_completion["text"], logprob=sequence_logprob, tokens=tokens, hidden_states=hidden_states, loss=loss, perplexity=perplexity)
             completion = truncate_sequence(completion, request)
             completions.append(completion)
 
         return RequestResult(
             success=True,
-            cached=cached,
+            cached=False,
             request_time=response["request_time"],
             request_datetime=response.get("request_datetime"),
             completions=completions,
@@ -337,14 +347,15 @@ class HuggingFaceClient(Client):
                         tokens = cleanup_tokens(tokens, request.tokenizer)
                 return {"tokens": tokens}
 
-            result, cached = self.cache.get(cache_key, wrap_request_time(do_it))
+            #result, cached = self.cache.get(cache_key, wrap_request_time(do_it))
+            result = wrap_request_time(do_it)()
         except Exception as e:
             error: str = f"HuggingFace error: {e}"
             return TokenizationRequestResult(success=False, cached=False, error=error, text="", tokens=[])
 
         return TokenizationRequestResult(
             success=True,
-            cached=cached,
+            cached=False,
             text=request.text,
             tokens=[TokenizationToken(value) for value in result["tokens"]],
             request_time=result["request_time"],
@@ -363,11 +374,12 @@ class HuggingFaceClient(Client):
                     )
                 }
 
-            result, cached = self.cache.get(cache_key, wrap_request_time(do_it))
+            #result, cached = self.cache.get(cache_key, wrap_request_time(do_it))
+            result = wrap_request_time(do_it)
         except Exception as e:
             error: str = f"HuggingFace error: {e}"
             return DecodeRequestResult(success=False, cached=False, error=error, text="")
 
         return DecodeRequestResult(
-            success=True, cached=cached, text=result["text"], request_time=result["request_time"]
+            success=True, cached=False, text=result["text"], request_time=result["request_time"]
         )

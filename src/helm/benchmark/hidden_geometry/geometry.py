@@ -30,8 +30,8 @@ class RunGeometry():
   hidden_states_collapse: collect hidden states of all instances and collapse them in one tensor
   nearest_neighbour: compute the nearest neighbours of each instance in the run per layer
   """
-
-  def __init__(self, scenario_state: ScenarioState | None = None, instaces_hiddenstates: List[InstanceHiddenSates] | None = None):
+#def __init__(self, scenario_state: ScenarioState | None = None, instaces_hiddenstates: List[InstanceHiddenSates] | None = None):
+  def __init__(self, scenario_state: ScenarioState, instaces_hiddenstates: List[InstanceHiddenSates]):
     self.scenario_state = scenario_state
     self._instances_hiddenstates = instaces_hiddenstates
     self.run_meta = self._set_run_meta()

@@ -249,6 +249,8 @@ class Runner:
         # Execute (fill up results)
         scenario_state = self.executor.execute(scenario_state)
         
+
+        
         # Apply the metrics
         # When performing a dry run, only estimate the number of tokens instead
         # of calculating the metrics.
@@ -284,22 +286,7 @@ class Runner:
             hlog("skip_instances was True. Skipping writing results out.")
             return
         
-        # Collect the hidden states - and perform Analysis 
-        if scenario_state.adapter_spec.hidden_states:
-            hidden_geometry: RunGeometry() = RunGeometry(scenario_state)
-            # Write ID of the instance
-            hlog(f"Writing ID of the instances to {run_path}/intrinsic_dim.pkl")
-            path = os.path.join(run_path, "intrinsic_dim.pkl")
-            with open(path, 'wb') as f:  
-                pickle.dump(hidden_geometry.instances_id,f)
 
-
-            # Write nearest neighbours matrices of the run
-            hlog(f"Writing nearest neighbours matrices of the run to {run_path}/nearest_neigh.pkl")
-            path = os.path.join(run_path, "nearest_neigh.pkl")
-            hlog("Warning: I am setting the number of nearest neighbours to 80/100 of instances")
-            with open(path, 'wb') as f:  
-                pickle.dump(hidden_geometry.dict_nn,f) 
  
         write(
             os.path.join(run_path, "stats.json"),
@@ -312,20 +299,44 @@ class Runner:
         # Write out scenario
         write(os.path.join(run_path, "scenario.json"), json.dumps(asdict_without_nones(scenario), indent=2))
 
-        # # Write scenario state
-        # # we need to remove hidden_states from scenario_state because they can't be serialized
+        # Write scenario state
+        if scenario_state.adapter_spec.hidden_states:
+            hlog(f"Writing hidden states of the run to {run_path}/hidden_states.pkl")
+            path = os.path.join(run_path, "hidden_states.pkl")
+            with open(path, 'wb') as f:  
+                pickle.dump(scenario_state,f)
         # dict_scenario = asdict_without_nones(scenario_state)
         # for request in dict_scenario["request_states"]:
         #     request["result"]["completions"][0]["hidden_states"] = None 
-
         # write(os.path.join(run_path, "scenario_state.json"), json.dumps(dict_scenario, indent=2))
 
-        
-       # write(
+        # # Write per instance stats
+        # write(
         #     os.path.join(run_path, "per_instance_stats.json"),
         #     json.dumps(list(map(asdict_without_nones, remove_per_instance_stats_nans(per_instance_stats))), indent=2),
         # )
         
-        # Collect the hidden states - and perform Analysis 
+
+
+
            
         cache_stats.print_status()
+
+
+
+            # # Write nearest neighbours matrices of the run
+            # hlog(f"Writing nearest neighbours matrices of the run to {run_path}/nearest_neigh.pkl")
+            # path = os.path.join(run_path, "nearest_neigh.pkl")
+            # hlog("Warning: I am setting the number of nearest neighbours to 80/100 of instances")
+            # with open(path, 'wb') as f:  
+            #     pickle.dump(hidden_geometry.dict_nn,f) 
+            
+                    # # Collect the hidden states - and perform Analysis 
+        #         # Collect the hidden states - and perform Analysis 
+        # if scenario_state.adapter_spec.hidden_states:
+        #     hidden_geometry: RunGeometry() = RunGeometry(scenario_state)
+        #     # Write ID of the instance
+        #     hlog(f"Writing  of the instances to {run_path}/intrinsic_dim.pkl")
+        #     path = os.path.join(run_path, "intrinsic_dim.pkl")
+        #     with open(path, 'wb') as f:  
+        #         pickle.dump(hidden_geometry.instances_id,f)
