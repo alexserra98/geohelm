@@ -121,18 +121,19 @@ class HuggingFaceServer:
         #-----------------------------------------
         # Use HuggingFace's `generate` method.
         #output = self.model.generate(**encoded_input, **relevant_raw_request)
-        output = self.model(**encoded_input, output_hidden_states=relevant_raw_request["output_hidden_states"])
-        scores = output.logits
-        probs = torch.nn.functional.softmax(scores/float(relevant_raw_request["temperature"]),dim=-1)
-        pred =  torch.multinomial(probs[0], num_samples=1).to(self.device)
-        sequences = torch.concat([encoded_input["input_ids"],pred[-1].unsqueeze(0)],dim=1)
+        with torch.no_grad():
+            output = self.model(**encoded_input, output_hidden_states=relevant_raw_request["output_hidden_states"])
+        scores = output.logits[0,-1].detach().cpu()
+        probs = torch.nn.functional.softmax(scores.unsqueeze(0)/float(relevant_raw_request["temperature"]),dim=-1)
+        pred =  torch.multinomial(probs[0], num_samples=1)
+        sequences = torch.concat([encoded_input["input_ids"].cpu(),pred.unsqueeze(0)],dim=1)
         #storing hidden states
         if raw_request["output_hidden_states"]:
             hs = torch.cat(output.hidden_states[-len_tokens_question:]).detach().cpu().numpy()
             hidden_states = {"last": copy.deepcopy(hs[:,-1,:]), "sum":reduce(copy.deepcopy(hs[:,-len_tokens_question:,:]), "l s d -> l d", "mean")}
         else:
             hidden_states = None
-
+        del output
         # Compute logprobs for each completed sequence.
         all_logprobs_of_chosen_tokens = []
         all_top_logprobs_dicts = []
@@ -140,7 +141,7 @@ class HuggingFaceServer:
             logprobs_of_chosen_tokens = []
             top_logprobs_dicts = []
             for i in range(len(sequences[completion_id]) - len(encoded_input.input_ids[0])):
-                logprobs = torch.nn.functional.log_softmax(scores[i][completion_id], dim=0)
+                logprobs = torch.nn.functional.log_softmax(scores, dim=0)
 
                 # Get top tokens in terms of log probability.
                 topk_logprobs = torch.topk(logprobs, k=top_k_per_token)
@@ -158,8 +159,8 @@ class HuggingFaceServer:
             all_top_logprobs_dicts.append(top_logprobs_dicts)
 
         # Compute loss and perplexity in predicting gold
-        loss_space = torch.nn.functional.cross_entropy(probs[:,-1], token_gold_space["input_ids"][0][0].unsqueeze(0).to(torch.long).to(self.device))
-        loss = torch.nn.functional.cross_entropy(probs[:,-1], token_gold["input_ids"][0][0].unsqueeze(0).to(torch.long).to(self.device))
+        loss_space = torch.nn.functional.cross_entropy(probs[0], token_gold_space["input_ids"][0][0].to(torch.long))
+        loss = torch.nn.functional.cross_entropy(probs[0], token_gold["input_ids"][0][0].to(torch.long))
         perp = torch.exp(loss)
         perp_space = torch.exp(loss_space)
         

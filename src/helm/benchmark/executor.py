@@ -110,7 +110,7 @@ class Executor:
             scenario_state.request_states,
             parallelism=self.execution_spec.parallelism,
         )
-        # request_states = [request_state for request_state in tqdm(scenario_state.request_states, desc="Processing requests")]
+        # request_states = [request_state for request_state in scenario_state.request_states]
         # request_states = [process(request_state) for request_state in tqdm(request_states, desc="Processing requests")]
         hlog(f"Processed {len(request_states)} requests")
         return ScenarioState(scenario_state.adapter_spec, request_states)
