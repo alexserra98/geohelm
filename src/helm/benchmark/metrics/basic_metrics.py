@@ -318,11 +318,11 @@ def exact_set_match(gold: str, pred: str) -> float:
 
 def loss_answer(request_state: RequestState):
     "Compute the cross entropy loss between the prediction of the model and the correct answer"
-    return request_state.result.completions[0].loss[0]
+    return request_state.result.completions[0].loss
 
 def perplexity_answer(request_state: RequestState):
     "Compute the perplexity of the model for the correct answer"
-    return request_state.result.completions[0].perplexity[0]
+    return request_state.result.completions[0].perplexity
 
 def absolute_value_difference(gold: str, pred: str) -> float:
     """Compute the absolute value of the difference between two numbers (provided as strings),

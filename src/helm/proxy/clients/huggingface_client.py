@@ -182,8 +182,8 @@ class HuggingFaceServer:
                     "logprobs": logprobs_of_chosen_tokens,
                     "top_logprobs_dicts": top_logprobs_dicts,
                     "hidden_states": hidden_states,
-                    "loss" : [loss.item(), loss_space.item()],
-                    "perplexity": [perp.item(), perp_space.item()],
+                    "loss" : min(loss.item(), loss_space.item()),
+                    "perplexity": min(perp.item(), perp_space.item()),
                 }
             )
         torch.cuda.empty_cache()
