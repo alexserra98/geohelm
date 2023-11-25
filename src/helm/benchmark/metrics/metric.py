@@ -182,36 +182,36 @@ class Metric(ABC):
             # Derive new per-instance statistics by calling `derive_per_instance_stats` (e.g., for calibration).
             # Again, group stats according to the context before calling
             # `derive_per_instance_stats`.
-            grouped_per_instance_stats: Dict[MetricContext, Dict[Instance, List[Stat]]] = defaultdict(
-                lambda: defaultdict(list)
-            )
-            for instance, stats in zip(scenario_state.instances, results):
-                for stat in stats:
-                    grouped_per_instance_stats[MetricContext.from_instance(instance)][instance].append(stat)
-            for context, instance_dict in grouped_per_instance_stats.items():
-                # Here, we assume that derive_per_instance_stats only computes trial_stats-level metrics
-                # (instance-level metrics should be computed in the evaluate_{generation,references} anyway).
-                for stat in self.derive_per_instance_stats(instance_dict):
-                    merge_stat(trial_stats, add_context(stat, context))
+            # grouped_per_instance_stats: Dict[MetricContext, Dict[Instance, List[Stat]]] = defaultdict(
+            #     lambda: defaultdict(list)
+            # )
+            # for instance, stats in zip(scenario_state.instances, results):
+            #     for stat in stats:
+            #         grouped_per_instance_stats[MetricContext.from_instance(instance)][instance].append(stat)
+            # for context, instance_dict in grouped_per_instance_stats.items():
+            #     # Here, we assume that derive_per_instance_stats only computes trial_stats-level metrics
+            #     # (instance-level metrics should be computed in the evaluate_{generation,references} anyway).
+            #     for stat in self.derive_per_instance_stats(instance_dict):
+            #         merge_stat(trial_stats, add_context(stat, context))
 
-            # Compute statistics that depend on all the `RequestStates` (e.g., bias metrics).
-            # Aggregate request states and call evaluate_instances in case the metric needs it.
-            grouped_request_states: Dict[MetricContext, List[RequestState]] = defaultdict(list)
-            for instance in scenario_state.instances:
-                # TODO: do we need to support reference_index that is not None?
-                grouped_request_states[MetricContext.from_instance(instance)].extend(
-                    scenario_state.get_request_states(train_trial_index, instance, None)
-                )
-            for context, request_states in grouped_request_states.items():
-                for stat in self.evaluate_instances(request_states):
-                    merge_stat(trial_stats, add_context(stat, context))
+            # # Compute statistics that depend on all the `RequestStates` (e.g., bias metrics).
+            # # Aggregate request states and call evaluate_instances in case the metric needs it.
+            # grouped_request_states: Dict[MetricContext, List[RequestState]] = defaultdict(list)
+            # for instance in scenario_state.instances:
+            #     # TODO: do we need to support reference_index that is not None?
+            #     grouped_request_states[MetricContext.from_instance(instance)].extend(
+            #         scenario_state.get_request_states(train_trial_index, instance, None)
+            #     )
+            # for context, request_states in grouped_request_states.items():
+            #     for stat in self.evaluate_instances(request_states):
+            #         merge_stat(trial_stats, add_context(stat, context))
 
-            # Compute worst-case metrics.
-            # This is here since we want these stats for all metrics and they
-            # aggregate across contexts (perturbations).
-            worst_case_stats = self.compute_worst_case_metrics(dict(zip(scenario_state.instances, results)))
-            for stat in worst_case_stats:
-                merge_stat(trial_stats, stat)
+            # # Compute worst-case metrics.
+            # # This is here since we want these stats for all metrics and they
+            # # aggregate across contexts (perturbations).
+            # worst_case_stats = self.compute_worst_case_metrics(dict(zip(scenario_state.instances, results)))
+            # for stat in worst_case_stats:
+            #     merge_stat(trial_stats, stat)
 
             # We take the mean value for each trial.
             for stat in trial_stats.values():
