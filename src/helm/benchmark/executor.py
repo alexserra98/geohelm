@@ -104,14 +104,16 @@ class Executor:
             return scenario_state
 
         # Do it!
+        request_states = [request_state for request_state in scenario_state.request_states]
+        with open("request_states.pkl", "wb") as f:
+            pickle.dump(request_states, f)
         process = partial(self.process, hidden_states=scenario_state.adapter_spec.hidden_states)
-        request_states = parallel_map(
-            process,
-            scenario_state.request_states,
-            parallelism=self.execution_spec.parallelism,
-        )
-        # request_states = [request_state for request_state in scenario_state.request_states]
-        # request_states = [process(request_state) for request_state in tqdm(request_states, desc="Processing requests")]
+        #request_states = parallel_map(
+        #    process,
+        #    scenario_state.request_states,
+        #    parallelism=self.execution_spec.parallelism,
+        #)
+        #request_states = [process(request_state) for request_state in tqdm(request_states, desc="Processing requests")]
         hlog(f"Processed {len(request_states)} requests")
         return ScenarioState(scenario_state.adapter_spec, request_states)
 

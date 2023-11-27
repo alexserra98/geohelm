@@ -244,63 +244,64 @@ class Runner:
 
         # Adapt (convert to requests)
         scenario_state: ScenarioState = adapter.adapt(instances, self.executor.execution_spec.parallelism)
-        with open("scenario_state.pkl", "wb") as f:   
-            pickle.dump(scenario_state, f)
+        path = os.path.join(run_path, "request_states.pkl")
+        with open(path, 'wb') as f:  
+            pickle.dump(scenario_state.request_states,f)
         # Execute (fill up results)
-        scenario_state = self.executor.execute(scenario_state)
-        
+        #scenario_state = self.executor.execute(scenario_state)
+        #
 
-        
-        # Apply the metrics
-        # When performing a dry run, only estimate the number of tokens instead
-        # of calculating the metrics.
-        metrics: List[Metric] = (
-            [DryRunMetric()] if self.dry_run else [create_metric(metric_spec) for metric_spec in run_spec.metric_specs]
-        )
-        stats: List[Stat] = []
-        per_instance_stats: List[PerInstanceStats] = []
-        with htrack_block(f"{len(metrics)} metrics"):
-            for metric in metrics:
-                with htrack_block(metric):
-                    metric_result: MetricResult = metric.evaluate(
-                        scenario_state,
-                        self.metric_service,
-                        self.eval_cache_path,
-                        self.executor.execution_spec.parallelism,
-                    )
-                    stats.extend(metric_result.aggregated_stats)
-                    per_instance_stats.extend(metric_result.per_instance_stats)
+        #
+        ## Apply the metrics
+        ## When performing a dry run, only estimate the number of tokens instead
+        ## of calculating the metrics.
+        #metrics: List[Metric] = (
+        #    [DryRunMetric()] if self.dry_run else [create_metric(metric_spec) for metric_spec in run_spec.metric_specs]
+        #)
+        #stats: List[Stat] = []
+        #per_instance_stats: List[PerInstanceStats] = []
+        #with htrack_block(f"{len(metrics)} metrics"):
+        #    for metric in metrics:
+        #        with htrack_block(metric):
+        #            metric_result: MetricResult = metric.evaluate(
+        #                scenario_state,
+        #                self.metric_service,
+        #                self.eval_cache_path,
+        #                self.executor.execution_spec.parallelism,
+        #            )
+        #            stats.extend(metric_result.aggregated_stats)
+        #            per_instance_stats.extend(metric_result.per_instance_stats)
 
 
-        # Check that there aren't duplicate `Stat`s
-        # Note: doesn't catch near misses.
-        metric_counts: typing.Counter[MetricName] = Counter([stat.name for stat in stats])
-        for metric_name, count in metric_counts.items():
-            if count > 1:
-                hlog(f"WARNING: duplicate metric name {metric_name}")
+        ## Check that there aren't duplicate `Stat`s
+        ## Note: doesn't catch near misses.
+        #metric_counts: typing.Counter[MetricName] = Counter([stat.name for stat in stats])
+        #for metric_name, count in metric_counts.items():
+        #    if count > 1:
+        #        hlog(f"WARNING: duplicate metric name {metric_name}")
 
-        # Print out the number of stats
-        hlog(f"Generated {len(stats)} stats.")
+        ## Print out the number of stats
+        #hlog(f"Generated {len(stats)} stats.")
 
-        if self.skip_instances:
-            hlog("skip_instances was True. Skipping writing results out.")
-            return
-        
+        #if self.skip_instances:
+        #    hlog("skip_instances was True. Skipping writing results out.")
+        #    return
+        #
  
-        write(
-            os.path.join(run_path, "stats.json"),
-            json.dumps([asdict_without_nones(stat) for stat in remove_stats_nans(stats)], indent=2),
-        )
+        #write(
+        #    os.path.join(run_path, "stats.json"),
+        #    json.dumps([asdict_without_nones(stat) for stat in remove_stats_nans(stats)], indent=2),
+        #)
  
-        # Write out scenario
-        write(os.path.join(run_path, "scenario.json"), json.dumps(asdict_without_nones(scenario), indent=2))
+        ## Write out scenario
+        #write(os.path.join(run_path, "scenario.json"), json.dumps(asdict_without_nones(scenario), indent=2))
 
-        # Write scenario state
-        if scenario_state.adapter_spec.hidden_states:
-            hlog(f"Writing scenario_state of the run to {run_path}/scenario_state.pkl")
-            path = os.path.join(run_path, "scenario_state.pkl")
-            with open(path, 'wb') as f:  
-                pickle.dump(scenario_state,f)
+        ## Write scenario state
+        #if scenario_state.adapter_spec.hidden_states:
+        #    hlog(f"Writing scenario_state of the run to {run_path}/scenario_state.pkl")
+        #    path = os.path.join(run_path, "scenario_state.pkl")
+        #    with open(path, 'wb') as f:  
+        #        pickle.dump(scenario_state,f)
         
         # Output benchmarking information and results to files
         #write(os.path.join(run_path, "run_spec.json"), json.dumps(asdict_without_nones(run_spec), indent=2))

@@ -63,14 +63,17 @@ class HuggingFaceServer:
         with htrack_block(f"Loading Hugging Face model for config {model_config}"):
             # we can set if the model should return the hidden states also in the generate method, and we take the condition from the adapter_spec
             model_kwargs["output_hidden_states"] = True
-            #model_kwargs["device_map"]="auto"
+
             if os.path.exists("/orfeo/scratch/dssc/zenocosini/"):
                 model_kwargs["cache_dir"]="/orfeo/scratch/dssc/zenocosini/"
-            #model_kwargs["torch_dtype"]="auto"
+            if "llama" in model_name:
+                model_kwargs["device_map"]="auto"
+                model_kwargs["torch_dtype"]="auto"
+                self.model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True, **model_kwargs)
+            else:
+                self.model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True, **model_kwargs).to(self.device)
             # WARNING this may fail if your GPU does not have enough memory
             # I'm addding output_hidden_states=True to the model to get the hidden states
-            self.model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True, **model_kwargs).to( self.device )
-            #self.model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True, **model_kwargs)
             #self.model.to_bettertransformer()
         with htrack_block(f"Loading Hugging Face tokenizer model for config {model_config}"):
             self.tokenizer = AutoTokenizer.from_pretrained(model_name, **model_kwargs)
@@ -376,7 +379,7 @@ class HuggingFaceClient(Client):
                 }
 
             #result, cached = self.cache.get(cache_key, wrap_request_time(do_it))
-            result = wrap_request_time(do_it)
+            result = wrap_request_time(do_it)()
         except Exception as e:
             error: str = f"HuggingFace error: {e}"
             return DecodeRequestResult(success=False, cached=False, error=error, text="")

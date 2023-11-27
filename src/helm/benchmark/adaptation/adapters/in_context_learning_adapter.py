@@ -71,11 +71,12 @@ class InContextLearningAdapter(Adapter, ABC):
         hlog(f"Sampled {len(self.train_instances)} examples for trial #{self.train_trial_index}.")
 
         # Generate request_states
-        results: List[List[RequestState]] = parallel_map(
-            self.generate_requests,
-            eval_instances,
-            parallelism=parallelism,
-        )
+        #results: List[List[RequestState]] = parallel_map(
+        #    self.generate_requests,
+        #    eval_instances,
+        #    parallelism=parallelism,
+        #)
+        results = [self.generate_requests(eval_instance) for eval_instance in eval_instances]
 
         # Print out prompts for one instance (useful for debugging)
         if train_trial_index == 0 and len(results) > 0:
