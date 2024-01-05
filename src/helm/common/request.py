@@ -120,7 +120,7 @@ class Sequence:
     tokens: List[Token]
 
     # The logits
-    logits: Optional[torch.tensor] = None
+    logits: Optional[list] = None
     
     # The hiddens states
     hidden_states: Optional[Dict] = None
